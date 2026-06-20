@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gwil's WC 2026 Predictions — Live Scoreboard</title>
+<style>
+  :root {
+    --green: #1e8e3e;
+    --green-bg: #e6f4ea;
+    --red: #c5221f;
+    --red-bg: #fce8e6;
+    --grey-bg: #f1f3f4;
+    --border: #d7dade;
+    --header-bg: #1a2b49;
+    --header-fg: #ffffff;
+    --accent: #2b5cab;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 0 0 60px 0;
+    background: #f5f6f8;
+    color: #1a1a1a;
+  }
+  header.page-header {
+    background: var(--header-bg);
+    color: var(--header-fg);
+    padding: 20px 24px;
+  }
+  header.page-header h1 {
+    margin: 0 0 4px 0;
+    font-size: 22px;
+  }
+  header.page-header p {
+    margin: 0;
+    font-size: 13px;
+    color: #c7d0e0;
+    max-width: 900px;
+    line-height: 1.5;
+  }
+  .rules-details summary {
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: #c7d0e0;
+    list-style: none;
+  }
+  .rules-details summary::-webkit-details-marker { display: none; }
+  .rules-details summary::before {
+    content: "▸ ";
+    display: inline-block;
+  }
+  .rules-details[open] summary::before {
+    content: "▾ ";
+  }
+  .rules-details summary:hover { color: #fff; }
+  .rules-details p { margin-top: 8px; }
+  .container {
+    padding: 20px;
+    max-width: 1500px;
+    margin: 0 auto;
+  }
+  .card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+  .card-title {
+    padding: 14px 18px;
+    font-weight: 600;
+    font-size: 15px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .card-title .meta {
+    font-size: 12px;
+    font-weight: 400;
+    color: #666;
+  }
+  table.leaderboard {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  table.leaderboard th, table.leaderboard td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  table.leaderboard th {
+    background: #fafbfc;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #555;
+  }
+  table.leaderboard td.num, table.leaderboard th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.leaderboard tr.me-row td { font-weight: 700; }
+  .rank-badge {
+    display: inline-block;
+    width: 22px;
+    text-align: center;
+    font-weight: 700;
+    color: #888;
+  }
+  .total-pos { color: var(--green); font-weight: 700; }
+  .total-neg { color: var(--red); font-weight: 700; }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 10px 18px 0 18px;
+    flex-wrap: wrap;
+  }
+  .tab-btn {
+    border: 1px solid var(--border);
+    background: #fafbfc;
+    padding: 8px 16px;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    border-bottom: none;
+    position: relative;
+    top: 1px;
+  }
+  .tab-btn.active {
+    background: white;
+    color: var(--accent);
+    border-bottom: 1px solid white;
+  }
+  .mw-panel { display: none; }
+  .mw-panel.active { display: block; }
+
+  .table-scroll {
+    overflow: auto;
+    max-height: 75vh;
+    border-top: 1px solid var(--border);
+  }
+  table.games {
+    border-collapse: collapse;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+  table.games th, table.games td {
+    border: 1px solid var(--border);
+    padding: 4px 6px;
+  }
+  table.games thead th {
+    background: var(--header-bg);
+    color: white;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  table.games thead th.col-fixture, table.games thead th.col-actual {
+    z-index: 4;
+  }
+  table.games th.col-fixture, table.games td.col-fixture {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: #fff;
+    text-align: left;
+    min-width: 190px;
+    white-space: nowrap;
+  }
+  table.games th.col-fixture { background: var(--header-bg); }
+  table.games th.col-actual, table.games td.col-actual {
+    position: sticky;
+    left: 190px;
+    z-index: 2;
+    background: #fcfcfd;
+    text-align: center;
+    min-width: 92px;
+  }
+  table.games th.col-actual { background: var(--header-bg); }
+  table.games tbody tr:nth-child(even) td.col-fixture,
+  table.games tbody tr:nth-child(even) td.col-actual {
+    background: #f7f8fa;
+  }
+  table.games td.player-cell {
+    text-align: center;
+    min-width: 58px;
+    vertical-align: middle;
+  }
+  td.player-cell.correct { background: var(--green-bg); }
+  td.player-cell.wrong { background: var(--red-bg); }
+  td.player-cell.pending { background: var(--grey-bg); }
+  td.player-cell.exact { background: #fff4d6; }
+  .pred-line { font-size: 10.5px; color: #777; line-height: 1.1; }
+  .pts-line { font-weight: 700; font-size: 13px; line-height: 1.3; }
+  .pts-line.correct { color: var(--green); }
+  .pts-line.wrong { color: var(--red); }
+  .pts-line.pending { color: #888; font-weight: 500; }
+  .pts-line.exact { color: #9a6b00; }
+  .mw-leader-box {
+    display: inline-block;
+    background: var(--green);
+    color: #fff;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 6px;
+  }
+  .mw-live-lead-box {
+    display: inline-block;
+    background: transparent;
+    color: inherit;
+    font-weight: 700;
+    padding: 1px 9px;
+    border-radius: 6px;
+    border: 2px solid var(--green);
+  }
+
+  .score-input {
+    width: 28px;
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 0;
+    font-size: 12.5px;
+  }
+  .score-sep { margin: 0 2px; color: #888; }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    padding: 10px 18px;
+    font-size: 12px;
+    color: #555;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--border);
+  }
+  .legend span.swatch {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .footer-note {
+    max-width: 1500px;
+    margin: 0 auto;
+    padding: 0 20px;
+    font-size: 12px;
+    color: #777;
+    line-height: 1.6;
+  }
+  .toolbar {
+    padding: 12px 18px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+  }
+  button.reset-btn {
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    color: #444;
+  }
+  button.reset-btn:hover { background: #f1f3f4; }
+  button.fetch-btn { color: var(--accent); font-weight: 600; }
+  button.fetch-btn:disabled { opacity: 0.5; cursor: default; }
+  .actual-wrap { display: inline-flex; align-items: center; justify-content: center; gap: 2px; }
+  .actual-badge {
+    font-weight: 700;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #eef1f6;
+  }
+  .actual-badge:hover { background: #e2e7f0; }
+  .actual-badge .edit-pencil { font-size: 10px; opacity: 0.6; }
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <h1>Gwil's WC 2026 Predictions — Live Scoreboard</h1>
+  <details class="rules-details">
+    <summary>How the game-by-game scoring works</summary>
+    <p>Game-by-game confidence-stake scoring. Each player ranked every fixture 1 (least confident) to 24 (most confident).
+       Correct result (Home/Draw/Away) scores <strong>+stake</strong>; an exact correct score <strong>doubles</strong> that to +stake×2;
+       a wrong result costs <strong>−stake</strong>. The winner of each matchweek gets a <strong>+5 bonus</strong>, awarded once every
+       fixture in that matchweek has a result — it won't appear or flip mid-week. While a matchweek is still open, whoever's currently
+       pace-setting is shown with a green outline (no points yet); it fills in solid green with the +5 once that matchweek is done.
+       Ties for the win are broken by, in order: most exact/correct scores that matchweek, then highest matchweek points if exact
+       scores weren't doubled — anyone still tied after that shares the bonus.
+       Type the actual score into a fixture as results come in — every player's points and the leaderboard update instantly and are saved in this browser.</p>
+  </details>
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <div class="card-title">
+      Leaderboard
+      <span class="meta" id="leaderboard-meta"></span>
+    </div>
+    <table class="leaderboard" id="leaderboard-table">
+      <thead><tr id="leaderboard-head"></tr></thead>
+      <tbody id="leaderboard-body"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="tabs" id="tabs"></div>
+    <div id="panels"></div>
+    <div class="legend">
+      <div><span class="swatch" style="background:var(--green-bg);border:1px solid var(--green)"></span>Correct result (+stake)</div>
+      <div><span class="swatch" style="background:#fff4d6;border:1px solid #b8860b"></span>Exact score (+stake ×2)</div>
+      <div><span class="swatch" style="background:var(--red-bg);border:1px solid var(--red)"></span>Wrong result (−stake)</div>
+      <div><span class="swatch" style="background:var(--grey-bg);border:1px solid #ccc"></span>Awaiting result (stake shown in brackets)</div>
+      <div><span class="mw-leader-box" style="padding:1px 8px;">+5</span> = matchweek winner, +5 bonus included (awarded once the matchweek is fully resolved; ties broken by most exact scores, then points without doubling)</div>
+      <div><span class="mw-live-lead-box" style="padding:0 7px;">±0</span> = currently leading an open matchweek (no bonus yet — fills solid green once the matchweek finishes)</div>
+    </div>
+    <div class="toolbar">
+      <button class="reset-btn fetch-btn" id="fetch-btn">⟳ Fetch live scores</button>
+      <span id="fetch-status" style="color:#888;"></span>
+    </div>
+    <div class="toolbar">
+      <button class="reset-btn" id="reset-btn">Reset all entered scores</button>
+      <span id="save-status" style="color:#888;"></span>
+    </div>
+    <p class="footer-note" style="padding:0 18px 14px;">
+      "Fetch live scores" pulls finished results from Wikipedia's World Cup group pages — free, no login,
+      usually updated within minutes of full-time (not second-by-second). Wikipedia is treated as the source
+      of truth: it fills in any blank fixture it has a confirmed score for, and corrects any entry — fetched
+      or typed in — that doesn't match the official result. Fixtures Wikipedia hasn't confirmed yet are left untouched.
+    </p>
+  </div>
+
+  <p class="footer-note">
+    Scores you type in are saved automatically to this browser (localStorage) — they won't sync across devices.
+    All Matchweek 1 results and Matchweek 2 results through 19 June 2026 are pre-filled; Japan v Tunisia (20 June) couldn't be
+    confirmed from a reliable source in time so it's left blank — check and enter it yourself once you know the score.
+    Everything else in Matchweek 2 is awaiting results as they're played.
+  </p>
+
+</div>
+
+<script>
+const DATA = {"players": ["Fred + Teilo", "Rhodri B", "Rhodri W", "Llion", "Nick B", "Ant", "Lane", "Gwil", "Matt", "Liam B", "Gaz T", "Guto", "Gaz E", "Trystan H", "Nick S", "Dan D", "🤖"], "matchweeks": [{"name": "Matchweek 1", "fixtures": [{"home": "Mexico", "away": "South Africa", "actual": {"h": 2, "a": 0}, "predictions": {"Fred + Teilo": {"h": 2, "a": 1, "stake": 12}, "Rhodri B": {"h": 3, "a": 0, "stake": 12}, "Rhodri W": {"h": 2, "a": 0, "stake": 10}, "Llion": {"h": 2, "a": 0, "stake": 6}, "Nick B": {"h": 3, "a": 1, "stake": 24}, "Ant": {"h": 2, "a": 1, "stake": 14}, "Lane": {"h": 2, "a": 0, "stake": 15}, "Gwil": {"h": 2, "a": 0, "stake": 17}, "Matt": {"h": 2, "a": 1, "stake": 15}, "Liam B": {"h": 3, "a": 1, "stake": 17}, "Gaz T": {"h": 2, "a": 0, "stake": 18}, "Guto": {"h": 3, "a": 1, "stake": 11}, "Gaz E": {"h": 2, "a": 1, "stake": 14}, "Trystan H": {"h": 3, "a": 1, "stake": 23}, "Nick S": {"h": 2, "a": 0, "stake": 15}, "Dan D": {"h": 3, "a": 1, "stake": 18}, "🤖": {"h": 2, "a": 0, "stake": 21}}}, {"home": "Korea Republic", "away": "Czechia", "actual": {"h": 2, "a": 1}, "predictions": {"Fred + Teilo": {"h": 1, "a": 1, "stake": 3}, "Rhodri B": {"h": 1, "a": 2, "stake": 20}, "Rhodri W": {"h": 1, "a": 1, "stake": 1}, "Llion": {"h": 1, "a": 2, "stake": 7}, "Nick B": {"h": 2, "a": 0, "stake": 7}, "Ant": {"h": 1, "a": 1, "stake": 2}, "Lane": {"h": 1, "a": 1, "stake": 2}, "Gwil": {"h": 1, "a": 2, "stake": 4}, "Matt": {"h": 1, "a": 1, "stake": 4}, "Liam B": {"h": 1, "a": 1, "stake": 1}, "Gaz T": {"h": 2, "a": 1, "stake": 3}, "Guto": {"h": 2, "a": 2, "stake": 1}, "Gaz E": {"h": 1, "a": 1, "stake": 4}, "Trystan H": {"h": 1, "a": 2, "stake": 2}, "Nick S": {"h": 2, "a": 1, "stake": 10}, "Dan D": {"h": 1, "a": 2, "stake": 5}, "🤖": {"h": 1, "a": 0, "stake": 9}}}, {"home": "Canada", "away": "Bosnia and Herzegovina", "actual": {"h": 1, "a": 1}, "predictions": {"Fred + Teilo": {"h": 1, "a": 1, "stake": 7}, "Rhodri B": {"h": 2, "a": 0, "stake": 15}, "Rhodri W": {"h": 2, "a": 0, "stake": 8}, "Llion": {"h": 0, "a": 2, "stake": 5}, "Nick B": {"h": 2, "a": 1, "stake": 8}, "Ant": {"h": 2, "a": 1, "stake": 22}, "Lane": {"h": 1, "a": 0, "stake": 3}, "Gwil": {"h": 1, "a": 1, "stake": 8}, "Matt": {"h": 1, "a": 1, "stake": 12}, "Liam B": {"h": 2, "a": 0, "stake": 5}, "Gaz T": {"h": 1, "a": 0, "stake": 6}, "Guto": {"h": 2, "a": 1, "stake": 12}, "Gaz E": {"h": 1, "a": 0, "stake": 5}, "Trystan H": {"h": 1, "a": 2, "stake": 6}, "Nick S": {"h": 1, "a": 1, "stake": 3}, "Dan D": {"h": 2, "a": 2, "stake": 3}, "🤖": {"h": 2, "a": 1, "stake": 16}}}, {"home": "Switzerland", "away": "Qatar", "actual": {"h": 1, "a": 1}, "predictions": {"Fred + Teilo": {"h": 2, "a": 0, "stake": 11}, "Rhodri B": {"h": 1, "a": 1, "stake": 2}, "Rhodri W": {"h": 2, "a": 0, "stake": 11}, "Llion": {"h": 3, "a": 0, "stake": 16}, "Nick B": {"h": 3, "a": 0, "stake": 9}, "Ant": {"h": 3, "a": 0, "stake": 9}, "Lane": {"h": 3, "a": 0, "stake": 20}, "Gwil": {"h": 3, "a": 1, "stake": 16}, "Matt": {"h": 2, "a": 0, "stake": 10}, "Liam B": {"h": 3, "a": 0, "stake": 18}, "Gaz T": {"h": 2, "a": 0, "stake": 10}, "Guto": {"h": 3, "a": 0, "stake": 19}, "Gaz E": {"h": 3, "a": 1, "stake": 15}, "Trystan H": {"h": 2, "a": 1, "stake": 7}, "Nick S": {"h": 3, "a": 0, "stake": 20}, "Dan D": {"h": 3, "a": 0, "stake": 14}, "🤖": {"h": 2, "a": 0, "stake": 12}}}, {"home": "Brazil", "away": "Morocco", "actual": {"h": 1, "a": 1}, "predictions": {"Fred + Teilo": {"h": 1, "a": 1, "stake": 8}, "Rhodri B": {"h": 2, "a": 0, "stake": 24}, "Rhodri W": {"h": 2, "a": 2, "stake": 2}, "Llion": {"h": 3, "a": 1, "stake": 17}, "Nick B": {"h": 3, "a": 1, "stake": 10}, "Ant": {"h": 2, "a": 1, "stake": 13}, "Lane": {"h": 1, "a": 1, "stake": 1}, "Gwil": {"h": 1, "a": 1, "stake": 2}, "Matt": {"h": 2, "a": 1, "stake": 8}, "Liam B": {"h": 2, "a": 1, "stake": 4}, "Gaz T": {"h": 3, "a": 1, "stake": 19}, "Guto": {"h": 4, "a": 2, "stake": 15}, "Gaz E": {"h": 1, "a": 1, "stake": 9}, "Trystan H": {"h": 4, "a": 0, "stake": 22}, "Nick S": {"h": 2, "a": 1, "stake": 4}, "Dan D": {"h": 3, "a": 2, "stake": 13}, "🤖": {"h": 1, "a": 1, "stake": 1}}}, {"home": "Haiti", "away": "Scotland", "actual": {"h": 0, "a": 1}, "predictions": {"Fred + Teilo": {"h": 0, "a": 3, "stake": 18}, "Rhodri B": {"h": 0, "a": 2, "stake": 21}, "Rhodri W": {"h": 0, "a": 2, "stake": 13}, "Llion": {"h": 0, "a": 2, "stake": 12}, "Nick B": {"h": 0, "a": 3, "stake": 23}, "Ant": {"h": 0, "a": 3, "stake": 15}, "Lane": {"h": 0, "a": 2, "stake": 13}, "Gwil": {"h": 0, "a": 3, "stake": 23}, "Matt": {"h": 0, "a": 2, "stake": 17}, "Liam B": {"h": 0, "a": 3, "stake": 15}, "Gaz T": {"h": 0, "a": 3, "stake": 17}, "Guto": {"h": 0, "a": 1, "stake": 10}, "Gaz E": {"h": 0, "a": 3, "stake": 21}, "Trystan H": {"h": 0, "a": 2, "stake": 20}, "Nick S": {"h": 0, "a": 2, "stake": 18}, "Dan D": {"h": 0, "a": 3, "stake": 19}, "🤖": {"h": 0, "a": 2, "stake": 17}}}, {"home": "United States", "away": "Paraguay", "actual": {"h": 4, "a": 1}, "predictions": {"Fred + Teilo": {"h": 2, "a": 1, "stake": 6}, "Rhodri B": {"h": 1, "a": 0, "stake": 16}, "Rhodri W": {"h": 2, "a": 0, "stake": 9}, "Llion": {"h": 2, "a": 1, "stake": 3}, "Nick B": {"h": 2, "a": 1, "stake": 14}, "Ant": {"h": 1, "a": 0, "stake": 8}, "Lane": {"h": 2, "a": 1, "stake": 5}, "Gwil": {"h": 1, "a": 0, "stake": 13}, "Matt": {"h": 2, "a": 1, "stake": 11}, "Liam B": {"h": 2, "a": 0, "stake": 9}, "Gaz T": {"h": 2, "a": 1, "stake": 4}, "Guto": {"h": 1, "a": 0, "stake": 3}, "Gaz E": {"h": 0, "a": 0, "stake": 8}, "Trystan H": {"h": 1, "a": 2, "stake": 11}, "Nick S": {"h": 1, "a": 1, "stake": 5}, "Dan D": {"h": 2, "a": 1, "stake": 7}, "🤖": {"h": 2, "a": 1, "stake": 8}}}, {"home": "Australia", "away": "Türkiye", "actual": {"h": 2, "a": 0}, "predictions": {"Fred + Teilo": {"h": 0, "a": 2, "stake": 14}, "Rhodri B": {"h": 0, "a": 0, "stake": 10}, "Rhodri W": {"h": 1, "a": 2, "stake": 6}, "Llion": {"h": 0, "a": 2, "stake": 18}, "Nick B": {"h": 1, "a": 3, "stake": 13}, "Ant": {"h": 1, "a": 4, "stake": 16}, "Lane": {"h": 0, "a": 2, "stake": 14}, "Gwil": {"h": 0, "a": 2, "stake": 14}, "Matt": {"h": 1, "a": 2, "stake": 7}, "Liam B": {"h": 0, "a": 2, "stake": 14}, "Gaz T": {"h": 1, "a": 1, "stake": 1}, "Guto": {"h": 2, "a": 3, "stake": 13}, "Gaz E": {"h": 1, "a": 2, "stake": 1}, "Trystan H": {"h": 1, "a": 2, "stake": 8}, "Nick S": {"h": 1, "a": 2, "stake": 6}, "Dan D": {"h": 0, "a": 2, "stake": 11}, "🤖": {"h": 1, "a": 1, "stake": 2}}}, {"home": "Germany", "away": "Curaçao", "actual": {"h": 7, "a": 1}, "predictions": {"Fred + Teilo": {"h": 5, "a": 0, "stake": 24}, "Rhodri B": {"h": 3, "a": 0, "stake": 23}, "Rhodri W": {"h": 4, "a": 0, "stake": 23}, "Llion": {"h": 4, "a": 0, "stake": 21}, "Nick B": {"h": 5, "a": 0, "stake": 22}, "Ant": {"h": 5, "a": 0, "stake": 23}, "Lane": {"h": 4, "a": 0, "stake": 23}, "Gwil": {"h": 4, "a": 0, "stake": 24}, "Matt": {"h": 4, "a": 0, "stake": 24}, "Liam B": {"h": 5, "a": 0, "stake": 24}, "Gaz T": {"h": 6, "a": 0, "stake": 22}, "Guto": {"h": 4, "a": 0, "stake": 22}, "Gaz E": {"h": 5, "a": 0, "stake": 23}, "Trystan H": {"h": 2, "a": 0, "stake": 19}, "Nick S": {"h": 4, "a": 0, "stake": 24}, "Dan D": {"h": 7, "a": 0, "stake": 24}, "🤖": {"h": 3, "a": 0, "stake": 24}}}, {"home": "Côte d'Ivoire", "away": "Ecuador", "actual": {"h": 1, "a": 0}, "predictions": {"Fred + Teilo": {"h": 2, "a": 1, "stake": 4}, "Rhodri B": {"h": 0, "a": 2, "stake": 11}, "Rhodri W": {"h": 1, "a": 1, "stake": 3}, "Llion": {"h": 2, "a": 2, "stake": 1}, "Nick B": {"h": 2, "a": 2, "stake": 1}, "Ant": {"h": 2, "a": 0, "stake": 7}, "Lane": {"h": 0, "a": 1, "stake": 4}, "Gwil": {"h": 2, "a": 2, "stake": 1}, "Matt": {"h": 1, "a": 1, "stake": 2}, "Liam B": {"h": 1, "a": 2, "stake": 3}, "Gaz T": {"h": 2, "a": 0, "stake": 16}, "Guto": {"h": 2, "a": 1, "stake": 4}, "Gaz E": {"h": 2, "a": 2, "stake": 6}, "Trystan H": {"h": 2, "a": 1, "stake": 9}, "Nick S": {"h": 1, "a": 2, "stake": 7}, "Dan D": {"h": 1, "a": 1, "stake": 4}, "🤖": {"h": 0, "a": 1, "stake": 6}}}, {"home": "Netherlands", "away": "Japan", "actual": {"h": 2, "a": 2}, "predictions": {"Fred + Teilo": {"h": 2, "a": 1, "stake": 16}, "Rhodri B": {"h": 2, "a": 1, "stake": 13}, "Rhodri W": {"h": 2, "a": 0, "stake": 15}, "Llion": {"h": 2, "a": 1, "stake": 13}, "Nick B": {"h": 2, "a": 2, "stake": 2}, "Ant": {"h": 2, "a": 2, "stake": 4}, "Lane": {"h": 2, "a": 1, "stake": 6}, "Gwil": {"h": 1, "a": 1, "stake": 11}, "Matt": {"h": 2, "a": 1, "stake": 6}, "Liam B": {"h": 2, "a": 2, "stake": 2}, "Gaz T": {"h": 2, "a": 1, "stake": 11}, "Guto": {"h": 3, "a": 1, "stake": 16}, "Gaz E": {"h": 3, "a": 1, "stake": 16}, "Trystan H": {"h": 2, "a": 1, "stake": 3}, "Nick S": {"h": 1, "a": 1, "stake": 1}, "Dan D": {"h": 3, "a": 1, "stake": 17}, "🤖": {"h": 1, "a": 1, "stake": 3}}}, {"home": "Tunisia", "away": "Sweden", "actual": {"h": 1, "a": 5}, "predictions": {"Fred + Teilo": {"h": 0, "a": 0, "stake": 1}, "Rhodri B": {"h": 2, "a": 2, "stake": 4}, "Rhodri W": {"h": 1, "a": 2, "stake": 5}, "Llion": {"h": 0, "a": 2, "stake": 11}, "Nick B": {"h": 1, "a": 1, "stake": 3}, "Ant": {"h": 1, "a": 0, "stake": 6}, "Lane": {"h": 0, "a": 1, "stake": 7}, "Gwil": {"h": 1, "a": 2, "stake": 7}, "Matt": {"h": 0, "a": 1, "stake": 3}, "Liam B": {"h": 2, "a": 1, "stake": 6}, "Gaz T": {"h": 1, "a": 1, "stake": 2}, "Guto": {"h": 0, "a": 2, "stake": 14}, "Gaz E": {"h": 0, "a": 2, "stake": 7}, "Trystan H": {"h": 0, "a": 2, "stake": 4}, "Nick S": {"h": 1, "a": 2, "stake": 8}, "Dan D": {"h": 0, "a": 2, "stake": 10}, "🤖": {"h": 0, "a": 1, "stake": 4}}}, {"home": "Belgium", "away": "Egypt", "actual": {"h": 1, "a": 1}, "predictions": {"Fred + Teilo": {"h": 2, "a": 1, "stake": 10}, "Rhodri B": {"h": 3, "a": 0, "stake": 22}, "Rhodri W": {"h": 2, "a": 1, "stake": 12}, "Llion": {"h": 3, "a": 1, "stake": 14}, "Nick B": {"h": 1, "a": 1, "stake": 11}, "Ant": {"h": 1, "a": 1, "stake": 3}, "Lane": {"h": 2, "a": 1, "stake": 10}, "Gwil": {"h": 2, "a": 1, "stake": 18}, "Matt": {"h": 2, "a": 1, "stake": 9}, "Liam B": {"h": 3, "a": 1, "stake": 10}, "Gaz T": {"h": 2, "a": 1, "stake": 7}, "Guto": {"h": 4, "a": 2, "stake": 17}, "Gaz E": {"h": 3, "a": 1, "stake": 17}, "Trystan H": {"h": 3, "a": 1, "stake": 5}, "Nick S": {"h": 2, "a": 1, "stake": 2}, "Dan D": {"h": 4, "a": 2, "stake": 16}, "🤖": {"h": 2, "a": 1, "stake": 10}}}, {"home": "IR Iran", "away": "New Zealand", "actual": {"h": 2, "a": 2}, "predictions": {"Fred + Teilo": {"h": 1, "a": 0, "stake": 5}, "Rhodri B": {"h": 0, "a": 1, "stake": 9}, "Rhodri W": {"h": 1, "a": 0, "stake": 7}, "Llion": {"h": 2, "a": 0, "stake": 2}, "Nick B": {"h": 2, "a": 0, "stake": 4}, "Ant": {"h": 1, "a": 0, "stake": 5}, "Lane": {"h": 2, "a": 0, "stake": 16}, "Gwil": {"h": 1, "a": 1, "stake": 5}, "Matt": {"h": 2, "a": 0, "stake": 16}, "Liam B": {"h": 2, "a": 1, "stake": 11}, "Gaz T": {"h": 1, "a": 0, "stake": 5}, "Guto": {"h": 1, "a": 1, "stake": 2}, "Gaz E": {"h": 1, "a": 1, "stake": 2}, "Trystan H": {"h": 1, "a": 2, "stake": 12}, "Nick S": {"h": 3, "a": 1, "stake": 12}, "Dan D": {"h": 0, "a": 1, "stake": 1}, "🤖": {"h": 2, "a": 0, "stake": 23}}}, {"home": "Spain", "away": "Cabo Verde", "actual": {"h": 0, "a": 0}, "predictions": {"Fred + Teilo": {"h": 6, "a": 0, "stake": 23}, "Rhodri B": {"h": 3, "a": 0, "stake": 19}, "Rhodri W": {"h": 4, "a": 0, "stake": 24}, "Llion": {"h": 4, "a": 0, "stake": 23}, "Nick B": {"h": 3, "a": 0, "stake": 21}, "Ant": {"h": 4, "a": 0, "stake": 24}, "Lane": {"h": 4, "a": 0, "stake": 24}, "Gwil": {"h": 3, "a": 0, "stake": 20}, "Matt": {"h": 3, "a": 0, "stake": 23}, "Liam B": {"h": 4, "a": 0, "stake": 22}, "Gaz T": {"h": 5, "a": 0, "stake": 24}, "Guto": {"h": 6, "a": 0, "stake": 24}, "Gaz E": {"h": 6, "a": 0, "stake": 24}, "Trystan H": {"h": 4, "a": 0, "stake": 17}, "Nick S": {"h": 4, "a": 0, "stake": 23}, "Dan D": {"h": 6, "a": 1, "stake": 23}, "🤖": {"h": 3, "a": 0, "stake": 22}}}, {"home": "Saudi Arabia", "away": "Uruguay", "actual": {"h": 1, "a": 1}, "predictions": {"Fred + Teilo": {"h": 1, "a": 3, "stake": 13}, "Rhodri B": {"h": 1, "a": 3, "stake": 7}, "Rhodri W": {"h": 0, "a": 2, "stake": 19}, "Llion": {"h": 1, "a": 2, "stake": 10}, "Nick B": {"h": 1, "a": 2, "stake": 12}, "Ant": {"h": 1, "a": 3, "stake": 12}, "Lane": {"h": 0, "a": 2, "stake": 21}, "Gwil": {"h": 1, "a": 2, "stake": 6}, "Matt": {"h": 0, "a": 2, "stake": 18}, "Liam B": {"h": 1, "a": 3, "stake": 19}, "Gaz T": {"h": 0, "a": 2, "stake": 12}, "Guto": {"h": 1, "a": 2, "stake": 5}, "Gaz E": {"h": 0, "a": 2, "stake": 18}, "Trystan H": {"h": 0, "a": 3, "stake": 18}, "Nick S": {"h": 1, "a": 2, "stake": 14}, "Dan D": {"h": 0, "a": 2, "stake": 8}, "🤖": {"h": 0, "a": 2, "stake": 20}}}, {"home": "France", "away": "Senegal", "actual": {"h": 3, "a": 1}, "predictions": {"Fred + Teilo": {"h": 3, "a": 1, "stake": 21}, "Rhodri B": {"h": 4, "a": 0, "stake": 18}, "Rhodri W": {"h": 2, "a": 0, "stake": 20}, "Llion": {"h": 3, "a": 1, "stake": 20}, "Nick B": {"h": 2, "a": 0, "stake": 17}, "Ant": {"h": 3, "a": 1, "stake": 19}, "Lane": {"h": 2, "a": 1, "stake": 9}, "Gwil": {"h": 1, "a": 0, "stake": 12}, "Matt": {"h": 2, "a": 1, "stake": 13}, "Liam B": {"h": 3, "a": 0, "stake": 16}, "Gaz T": {"h": 2, "a": 1, "stake": 15}, "Guto": {"h": 3, "a": 1, "stake": 20}, "Gaz E": {"h": 4, "a": 1, "stake": 22}, "Trystan H": {"h": 3, "a": 1, "stake": 16}, "Nick S": {"h": 2, "a": 0, "stake": 13}, "Dan D": {"h": 3, "a": 0, "stake": 22}, "🤖": {"h": 2, "a": 1, "stake": 7}}}, {"home": "Norway", "away": "Iraq", "actual": {"h": 4, "a": 1}, "predictions": {"Fred + Teilo": {"h": 2, "a": 0, "stake": 20}, "Rhodri B": {"h": 2, "a": 0, "stake": 14}, "Rhodri W": {"h": 3, "a": 1, "stake": 18}, "Llion": {"h": 2, "a": 0, "stake": 15}, "Nick B": {"h": 3, "a": 0, "stake": 18}, "Ant": {"h": 2, "a": 0, "stake": 18}, "Lane": {"h": 2, "a": 0, "stake": 19}, "Gwil": {"h": 2, "a": 0, "stake": 19}, "Matt": {"h": 2, "a": 0, "stake": 19}, "Liam B": {"h": 3, "a": 1, "stake": 21}, "Gaz T": {"h": 2, "a": 0, "stake": 9}, "Guto": {"h": 3, "a": 2, "stake": 8}, "Gaz E": {"h": 2, "a": 0, "stake": 10}, "Trystan H": {"h": 3, "a": 0, "stake": 13}, "Nick S": {"h": 2, "a": 1, "stake": 17}, "Dan D": {"h": 2, "a": 0, "stake": 15}, "🤖": {"h": 2, "a": 0, "stake": 14}}}, {"home": "Argentina", "away": "Algeria", "actual": {"h": 3, "a": 0}, "predictions": {"Fred + Teilo": {"h": 2, "a": 1, "stake": 19}, "Rhodri B": {"h": 2, "a": 0, "stake": 17}, "Rhodri W": {"h": 3, "a": 0, "stake": 22}, "Llion": {"h": 3, "a": 0, "stake": 22}, "Nick B": {"h": 2, "a": 0, "stake": 19}, "Ant": {"h": 2, "a": 1, "stake": 11}, "Lane": {"h": 1, "a": 0, "stake": 8}, "Gwil": {"h": 2, "a": 0, "stake": 10}, "Matt": {"h": 3, "a": 0, "stake": 22}, "Liam B": {"h": 2, "a": 1, "stake": 7}, "Gaz T": {"h": 3, "a": 1, "stake": 20}, "Guto": {"h": 4, "a": 1, "stake": 21}, "Gaz E": {"h": 3, "a": 1, "stake": 3}, "Trystan H": {"h": 4, "a": 0, "stake": 24}, "Nick S": {"h": 3, "a": 0, "stake": 21}, "Dan D": {"h": 4, "a": 0, "stake": 21}, "🤖": {"h": 2, "a": 0, "stake": 11}}}, {"home": "Austria", "away": "Jordan", "actual": {"h": 3, "a": 1}, "predictions": {"Fred + Teilo": {"h": 3, "a": 0, "stake": 15}, "Rhodri B": {"h": 1, "a": 0, "stake": 3}, "Rhodri W": {"h": 2, "a": 0, "stake": 14}, "Llion": {"h": 2, "a": 0, "stake": 19}, "Nick B": {"h": 2, "a": 1, "stake": 5}, "Ant": {"h": 3, "a": 0, "stake": 20}, "Lane": {"h": 2, "a": 0, "stake": 18}, "Gwil": {"h": 3, "a": 0, "stake": 22}, "Matt": {"h": 2, "a": 0, "stake": 20}, "Liam B": {"h": 2, "a": 0, "stake": 12}, "Gaz T": {"h": 2, "a": 0, "stake": 14}, "Guto": {"h": 2, "a": 0, "stake": 18}, "Gaz E": {"h": 3, "a": 0, "stake": 19}, "Trystan H": {"h": 3, "a": 0, "stake": 10}, "Nick S": {"h": 2, "a": 0, "stake": 19}, "Dan D": {"h": 2, "a": 0, "stake": 9}, "🤖": {"h": 2, "a": 0, "stake": 18}}}, {"home": "Portugal", "away": "Congo DR", "actual": {"h": 1, "a": 1}, "predictions": {"Fred + Teilo": {"h": 4, "a": 0, "stake": 22}, "Rhodri B": {"h": 2, "a": 0, "stake": 6}, "Rhodri W": {"h": 3, "a": 0, "stake": 21}, "Llion": {"h": 4, "a": 0, "stake": 24}, "Nick B": {"h": 4, "a": 0, "stake": 20}, "Ant": {"h": 2, "a": 2, "stake": 21}, "Lane": {"h": 3, "a": 0, "stake": 22}, "Gwil": {"h": 2, "a": 0, "stake": 21}, "Matt": {"h": 3, "a": 0, "stake": 21}, "Liam B": {"h": 4, "a": 0, "stake": 23}, "Gaz T": {"h": 4, "a": 0, "stake": 23}, "Guto": {"h": 5, "a": 0, "stake": 23}, "Gaz E": {"h": 4, "a": 0, "stake": 20}, "Trystan H": {"h": 3, "a": 0, "stake": 15}, "Nick S": {"h": 4, "a": 0, "stake": 16}, "Dan D": {"h": 3, "a": 0, "stake": 20}, "🤖": {"h": 2, "a": 0, "stake": 19}}}, {"home": "Colombia", "away": "Uzbekistan", "actual": {"h": 3, "a": 1}, "predictions": {"Fred + Teilo": {"h": 1, "a": 0, "stake": 9}, "Rhodri B": {"h": 1, "a": 1, "stake": 5}, "Rhodri W": {"h": 2, "a": 0, "stake": 16}, "Llion": {"h": 2, "a": 0, "stake": 4}, "Nick B": {"h": 2, "a": 0, "stake": 16}, "Ant": {"h": 2, "a": 1, "stake": 1}, "Lane": {"h": 2, "a": 0, "stake": 17}, "Gwil": {"h": 2, "a": 1, "stake": 15}, "Matt": {"h": 2, "a": 1, "stake": 14}, "Liam B": {"h": 3, "a": 0, "stake": 20}, "Gaz T": {"h": 3, "a": 1, "stake": 21}, "Guto": {"h": 3, "a": 2, "stake": 6}, "Gaz E": {"h": 3, "a": 0, "stake": 11}, "Trystan H": {"h": 2, "a": 0, "stake": 21}, "Nick S": {"h": 3, "a": 0, "stake": 22}, "Dan D": {"h": 2, "a": 1, "stake": 6}, "🤖": {"h": 2, "a": 1, "stake": 13}}}, {"home": "England", "away": "Croatia", "actual": {"h": 4, "a": 2}, "predictions": {"Fred + Teilo": {"h": 3, "a": 1, "stake": 17}, "Rhodri B": {"h": 2, "a": 1, "stake": 8}, "Rhodri W": {"h": 2, "a": 1, "stake": 17}, "Llion": {"h": 2, "a": 1, "stake": 8}, "Nick B": {"h": 2, "a": 1, "stake": 6}, "Ant": {"h": 2, "a": 1, "stake": 17}, "Lane": {"h": 2, "a": 0, "stake": 12}, "Gwil": {"h": 2, "a": 0, "stake": 9}, "Matt": {"h": 2, "a": 1, "stake": 5}, "Liam B": {"h": 2, "a": 0, "stake": 13}, "Gaz T": {"h": 2, "a": 1, "stake": 13}, "Guto": {"h": 2, "a": 1, "stake": 7}, "Gaz E": {"h": 2, "a": 1, "stake": 13}, "Trystan H": {"h": 1, "a": 2, "stake": 1}, "Nick S": {"h": 1, "a": 1, "stake": 9}, "Dan D": {"h": 2, "a": 1, "stake": 12}, "🤖": {"h": 1, "a": 1, "stake": 5}}}, {"home": "Ghana", "away": "Panama", "actual": {"h": 1, "a": 0}, "predictions": {"Fred + Teilo": {"h": 1, "a": 1, "stake": 2}, "Rhodri B": {"h": 1, "a": 1, "stake": 1}, "Rhodri W": {"h": 2, "a": 1, "stake": 4}, "Llion": {"h": 2, "a": 0, "stake": 9}, "Nick B": {"h": 3, "a": 1, "stake": 15}, "Ant": {"h": 2, "a": 0, "stake": 10}, "Lane": {"h": 2, "a": 1, "stake": 11}, "Gwil": {"h": 2, "a": 0, "stake": 3}, "Matt": {"h": 1, "a": 1, "stake": 1}, "Liam B": {"h": 2, "a": 0, "stake": 8}, "Gaz T": {"h": 2, "a": 0, "stake": 8}, "Guto": {"h": 2, "a": 1, "stake": 9}, "Gaz E": {"h": 2, "a": 0, "stake": 12}, "Trystan H": {"h": 2, "a": 0, "stake": 14}, "Nick S": {"h": 2, "a": 1, "stake": 11}, "Dan D": {"h": 1, "a": 1, "stake": 2}, "🤖": {"h": 1, "a": 2, "stake": 15}}}]}, {"name": "Matchweek 2", "fixtures": [{"home": "Mexico", "away": "South Korea", "actual": {"h": 1, "a": 0}, "predictions": {"Fred + Teilo": {"h": 1, "a": 1, "stake": 2}, "Rhodri B": {"h": 1, "a": 1, "stake": 10}, "Rhodri W": {"h": 2, "a": 1, "stake": 5}, "Llion": {"h": 2, "a": 2, "stake": 5}, "Nick B": {"h": 2, "a": 1, "stake": 3}, "Ant": {"h": 1, "a": 1, "stake": 6}, "Lane": {"h": 1, "a": 0, "stake": 3}, "Gwil": {"h": 1, "a": 2, "stake": 4}, "Matt": {"h": 2, "a": 1, "stake": 8}, "Liam B": {"h": 2, "a": 1, "stake": 2}, "Gaz T": {"h": 2, "a": 1, "stake": 3}, "Guto": {"h": 2, "a": 2, "stake": 2}, "Gaz E": {"h": 1, "a": 1, "stake": 9}, "Trystan H": {"h": 1, "a": 2, "stake": 3}, "Nick S": {"h": 2, "a": 2, "stake": 5}, "Dan D": {"h": 1, "a": 2, "stake": 2}, "🤖": {"h": 2, "a": 1, "stake": 15}}}, {"home": "South Africa", "away": "Czechia", "actual": {"h": 1, "a": 1}, "predictions": {"Fred + Teilo": {"h": 0, "a": 1, "stake": 9}, "Rhodri B": {"h": 0, "a": 0, "stake": 8}, "Rhodri W": {"h": 0, "a": 2, "stake": 14}, "Llion": {"h": 0, "a": 2, "stake": 14}, "Nick B": {"h": 1, "a": 1, "stake": 1}, "Ant": {"h": 0, "a": 2, "stake": 5}, "Lane": {"h": 0, "a": 2, "stake": 8}, "Gwil": {"h": 0, "a": 2, "stake": 15}, "Matt": {"h": 1, "a": 1, "stake": 1}, "Liam B": {"h": 1, "a": 2, "stake": 3}, "Gaz T": {"h": 0, "a": 1, "stake": 4}, "Guto": {"h": 0, "a": 2, "stake": 18}, "Gaz E": {"h": 1, "a": 2, "stake": 12}, "Trystan H": {"h": 1, "a": 3, "stake": 12}, "Nick S": {"h": 1, "a": 2, "stake": 4}, "Dan D": {"h": 0, "a": 2, "stake": 5}, "🤖": {"h": 0, "a": 1, "stake": 10}}}, {"home": "Canada", "away": "Qatar", "actual": {"h": 6, "a": 0}, "predictions": {"Fred + Teilo": {"h": 2, "a": 1, "stake": 8}, "Rhodri B": {"h": 2, "a": 0, "stake": 9}, "Rhodri W": {"h": 2, "a": 1, "stake": 7}, "Llion": {"h": 2, "a": 1, "stake": 9}, "Nick B": {"h": 3, "a": 0, "stake": 12}, "Ant": {"h": 1, "a": 0, "stake": 12}, "Lane": {"h": 2, "a": 0, "stake": 9}, "Gwil": {"h": 3, "a": 0, "stake": 23}, "Matt": {"h": 2, "a": 1, "stake": 11}, "Liam B": {"h": 2, "a": 0, "stake": 11}, "Gaz T": {"h": 2, "a": 0, "stake": 11}, "Guto": {"h": 2, "a": 1, "stake": 4}, "Gaz E": {"h": 2, "a": 1, "stake": 8}, "Trystan H": {"h": 2, "a": 0, "stake": 4}, "Nick S": {"h": 2, "a": 0, "stake": 7}, "Dan D": {"h": 2, "a": 1, "stake": 4}, "🤖": {"h": 2, "a": 1, "stake": 5}}}, {"home": "Switzerland", "away": "Bosnia and Herzegovina", "actual": {"h": 4, "a": 1}, "predictions": {"Fred + Teilo": {"h": 1, "a": 0, "stake": 7}, "Rhodri B": {"h": 1, "a": 2, "stake": 2}, "Rhodri W": {"h": 1, "a": 1, "stake": 3}, "Llion": {"h": 2, "a": 1, "stake": 10}, "Nick B": {"h": 2, "a": 1, "stake": 9}, "Ant": {"h": 1, "a": 2, "stake": 2}, "Lane": {"h": 2, "a": 1, "stake": 7}, "Gwil": {"h": 1, "a": 0, "stake": 9}, "Matt": {"h": 2, "a": 1, "stake": 5}, "Liam B": {"h": 2, "a": 0, "stake": 8}, "Gaz T": {"h": 3, "a": 1, "stake": 10}, "Guto": {"h": 2, "a": 1, "stake": 3}, "Gaz E": {"h": 0, "a": 0, "stake": 1}, "Trystan H": {"h": 2, "a": 1, "stake": 5}, "Nick S": {"h": 1, "a": 1, "stake": 3}, "Dan D": {"h": 2, "a": 0, "stake": 12}, "🤖": {"h": 2, "a": 0, "stake": 16}}}, {"home": "Brazil", "away": "Haiti", "actual": {"h": 3, "a": 0}, "predictions": {"Fred + Teilo": {"h": 3, "a": 0, "stake": 24}, "Rhodri B": {"h": 3, "a": 0, "stake": 21}, "Rhodri W": {"h": 3, "a": 0, "stake": 22}, "Llion": {"h": 3, "a": 0, "stake": 23}, "Nick B": {"h": 6, "a": 0, "stake": 24}, "Ant": {"h": 3, "a": 0, "stake": 24}, "Lane": {"h": 4, "a": 0, "stake": 21}, "Gwil": {"h": 5, "a": 0, "stake": 24}, "Matt": {"h": 4, "a": 0, "stake": 23}, "Liam B": {"h": 4, "a": 0, "stake": 24}, "Gaz T": {"h": 4, "a": 0, "stake": 24}, "Guto": {"h": 4, "a": 0, "stake": 23}, "Gaz E": {"h": 6, "a": 0, "stake": 14}, "Trystan H": {"h": 5, "a": 0, "stake": 24}, "Nick S": {"h": 3, "a": 0, "stake": 21}, "Dan D": {"h": 4, "a": 0, "stake": 23}, "🤖": {"h": 3, "a": 0, "stake": 24}}}, {"home": "Morocco", "away": "Scotland", "actual": {"h": 1, "a": 0}, "predictions": {"Fred + Teilo": {"h": 2, "a": 0, "stake": 16}, "Rhodri B": {"h": 2, "a": 0, "stake": 20}, "Rhodri W": {"h": 3, "a": 1, "stake": 17}, "Llion": {"h": 2, "a": 0, "stake": 20}, "Nick B": {"h": 2, "a": 1, "stake": 11}, "Ant": {"h": 2, "a": 0, "stake": 13}, "Lane": {"h": 2, "a": 0, "stake": 17}, "Gwil": {"h": 2, "a": 0, "stake": 6}, "Matt": {"h": 2, "a": 1, "stake": 12}, "Liam B": {"h": 2, "a": 0, "stake": 9}, "Gaz T": {"h": 2, "a": 1, "stake": 15}, "Guto": {"h": 3, "a": 1, "stake": 19}, "Gaz E": {"h": 3, "a": 1, "stake": 13}, "Trystan H": {"h": 1, "a": 2, "stake": 11}, "Nick S": {"h": 2, "a": 1, "stake": 9}, "Dan D": {"h": 3, "a": 1, "stake": 10}, "🤖": {"h": 2, "a": 1, "stake": 8}}}, {"home": "United States", "away": "Australia", "actual": {"h": 2, "a": 0}, "predictions": {"Fred + Teilo": {"h": 2, "a": 0, "stake": 10}, "Rhodri B": {"h": 2, "a": 1, "stake": 17}, "Rhodri W": {"h": 2, "a": 2, "stake": 1}, "Llion": {"h": 3, "a": 1, "stake": 16}, "Nick B": {"h": 3, "a": 1, "stake": 8}, "Ant": {"h": 3, "a": 2, "stake": 16}, "Lane": {"h": 2, "a": 0, "stake": 11}, "Gwil": {"h": 3, "a": 0, "stake": 7}, "Matt": {"h": 2, "a": 1, "stake": 13}, "Liam B": {"h": 2, "a": 1, "stake": 4}, "Gaz T": {"h": 2, "a": 1, "stake": 6}, "Guto": {"h": 2, "a": 1, "stake": 9}, "Gaz E": {"h": 3, "a": 0, "stake": 4}, "Trystan H": {"h": 2, "a": 1, "stake": 7}, "Nick S": {"h": 3, "a": 1, "stake": 16}, "Dan D": {"h": 2, "a": 0, "stake": 11}, "🤖": {"h": 2, "a": 1, "stake": 14}}}, {"home": "Paraguay", "away": "Türkiye", "actual": {"h": 1, "a": 0}, "predictions": {"Fred + Teilo": {"h": 1, "a": 2, "stake": 6}, "Rhodri B": {"h": 0, "a": 3, "stake": 18}, "Rhodri W": {"h": 1, "a": 1, "stake": 2}, "Llion": {"h": 1, "a": 2, "stake": 12}, "Nick B": {"h": 1, "a": 2, "stake": 6}, "Ant": {"h": 0, "a": 2, "stake": 8}, "Lane": {"h": 1, "a": 1, "stake": 2}, "Gwil": {"h": 1, "a": 3, "stake": 11}, "Matt": {"h": 1, "a": 1, "stake": 2}, "Liam B": {"h": 1, "a": 2, "stake": 6}, "Gaz T": {"h": 0, "a": 2, "stake": 2}, "Guto": {"h": 1, "a": 2, "stake": 5}, "Gaz E": {"h": 1, "a": 1, "stake": 11}, "Trystan H": {"h": 0, "a": 2, "stake": 9}, "Nick S": {"h": 1, "a": 1, "stake": 6}, "Dan D": {"h": 1, "a": 3, "stake": 9}, "🤖": {"h": 1, "a": 1, "stake": 2}}}, {"home": "Germany", "away": "Côte d'Ivoire", "actual": {"h": 2, "a": 1}, "predictions": {"Fred + Teilo": {"h": 2, "a": 1, "stake": 18}, "Rhodri B": {"h": 4, "a": 0, "stake": 24}, "Rhodri W": {"h": 3, "a": 1, "stake": 18}, "Llion": {"h": 3, "a": 1, "stake": 19}, "Nick B": {"h": 3, "a": 1, "stake": 13}, "Ant": {"h": 2, "a": 1, "stake": 7}, "Lane": {"h": 2, "a": 1, "stake": 12}, "Gwil": {"h": 2, "a": 0, "stake": 8}, "Matt": {"h": 3, "a": 1, "stake": 21}, "Liam B": {"h": 3, "a": 1, "stake": 5}, "Gaz T": {"h": 3, "a": 1, "stake": 12}, "Guto": {"h": 4, "a": 2, "stake": 14}, "Gaz E": {"h": 3, "a": 0, "stake": 24}, "Trystan H": {"h": 3, "a": 0, "stake": 22}, "Nick S": {"h": 3, "a": 1, "stake": 8}, "Dan D": {"h": 3, "a": 1, "stake": 19}, "🤖": {"h": 2, "a": 0, "stake": 18}}}, {"home": "Curaçao", "away": "Ecuador", "actual": null, "predictions": {"Fred + Teilo": {"h": 0, "a": 2, "stake": 11}, "Rhodri B": {"h": 1, "a": 1, "stake": 1}, "Rhodri W": {"h": 0, "a": 2, "stake": 16}, "Llion": {"h": 0, "a": 2, "stake": 13}, "Nick B": {"h": 1, "a": 3, "stake": 15}, "Ant": {"h": 0, "a": 4, "stake": 23}, "Lane": {"h": 0, "a": 2, "stake": 13}, "Gwil": {"h": 1, "a": 1, "stake": 1}, "Matt": {"h": 0, "a": 3, "stake": 22}, "Liam B": {"h": 0, "a": 4, "stake": 23}, "Gaz T": {"h": 1, "a": 2, "stake": 16}, "Guto": {"h": 0, "a": 3, "stake": 20}, "Gaz E": {"h": 0, "a": 3, "stake": 10}, "Trystan H": {"h": 0, "a": 2, "stake": 13}, "Nick S": {"h": 0, "a": 3, "stake": 14}, "Dan D": {"h": 0, "a": 2, "stake": 8}, "🤖": {"h": 0, "a": 2, "stake": 13}}}, {"home": "Netherlands", "away": "Sweden", "actual": {"h": 5, "a": 1}, "predictions": {"Fred + Teilo": {"h": 2, "a": 2, "stake": 3}, "Rhodri B": {"h": 2, "a": 1, "stake": 12}, "Rhodri W": {"h": 1, "a": 1, "stake": 4}, "Llion": {"h": 2, "a": 2, "stake": 11}, "Nick B": {"h": 2, "a": 2, "stake": 2}, "Ant": {"h": 2, "a": 2, "stake": 1}, "Lane": {"h": 1, "a": 1, "stake": 1}, "Gwil": {"h": 2, "a": 2, "stake": 3}, "Matt": {"h": 2, "a": 1, "stake": 4}, "Liam B": {"h": 2, "a": 0, "stake": 7}, "Gaz T": {"h": 2, "a": 1, "stake": 5}, "Guto": {"h": 3, "a": 2, "stake": 6}, "Gaz E": {"h": 2, "a": 2, "stake": 3}, "Trystan H": {"h": 3, "a": 1, "stake": 19}, "Nick S": {"h": 2, "a": 1, "stake": 13}, "Dan D": {"h": 2, "a": 1, "stake": 7}, "🤖": {"h": 1, "a": 1, "stake": 3}}}, {"home": "Japan", "away": "Tunisia", "actual": null, "predictions": {"Fred + Teilo": {"h": 2, "a": 0, "stake": 15}, "Rhodri B": {"h": 0, "a": 1, "stake": 13}, "Rhodri W": {"h": 2, "a": 0, "stake": 15}, "Llion": {"h": 2, "a": 0, "stake": 17}, "Nick B": {"h": 3, "a": 1, "stake": 7}, "Ant": {"h": 3, "a": 1, "stake": 15}, "Lane": {"h": 3, "a": 0, "stake": 10}, "Gwil": {"h": 4, "a": 0, "stake": 18}, "Matt": {"h": 2, "a": 0, "stake": 19}, "Liam B": {"h": 3, "a": 1, "stake": 10}, "Gaz T": {"h": 1, "a": 0, "stake": 8}, "Guto": {"h": 3, "a": 1, "stake": 11}, "Gaz E": {"h": 3, "a": 1, "stake": 19}, "Trystan H": {"h": 2, "a": 0, "stake": 8}, "Nick S": {"h": 3, "a": 0, "stake": 17}, "Dan D": {"h": 2, "a": 0, "stake": 17}, "🤖": {"h": 2, "a": 1, "stake": 6}}}, {"home": "Belgium", "away": "IR Iran", "actual": null, "predictions": {"Fred + Teilo": {"h": 2, "a": 1, "stake": 17}, "Rhodri B": {"h": 4, "a": 0, "stake": 23}, "Rhodri W": {"h": 2, "a": 0, "stake": 8}, "Llion": {"h": 2, "a": 0, "stake": 15}, "Nick B": {"h": 3, "a": 0, "stake": 14}, "Ant": {"h": 3, "a": 1, "stake": 14}, "Lane": {"h": 2, "a": 0, "stake": 14}, "Gwil": {"h": 3, "a": 0, "stake": 19}, "Matt": {"h": 2, "a": 1, "stake": 9}, "Liam B": {"h": 3, "a": 0, "stake": 16}, "Gaz T": {"h": 2, "a": 1, "stake": 13}, "Guto": {"h": 1, "a": 0, "stake": 7}, "Gaz E": {"h": 4, "a": 0, "stake": 18}, "Trystan H": {"h": 3, "a": 1, "stake": 18}, "Nick S": {"h": 2, "a": 0, "stake": 11}, "Dan D": {"h": 3, "a": 1, "stake": 18}, "🤖": {"h": 2, "a": 1, "stake": 7}}}, {"home": "Egypt", "away": "New Zealand", "actual": null, "predictions": {"Fred + Teilo": {"h": 1, "a": 0, "stake": 12}, "Rhodri B": {"h": 1, "a": 1, "stake": 3}, "Rhodri W": {"h": 1, "a": 0, "stake": 10}, "Llion": {"h": 1, "a": 0, "stake": 1}, "Nick B": {"h": 4, "a": 0, "stake": 21}, "Ant": {"h": 2, "a": 0, "stake": 11}, "Lane": {"h": 3, "a": 0, "stake": 22}, "Gwil": {"h": 2, "a": 0, "stake": 20}, "Matt": {"h": 2, "a": 1, "stake": 6}, "Liam B": {"h": 3, "a": 1, "stake": 15}, "Gaz T": {"h": 1, "a": 0, "stake": 17}, "Guto": {"h": 3, "a": 1, "stake": 12}, "Gaz E": {"h": 1, "a": 0, "stake": 7}, "Trystan H": {"h": 2, "a": 0, "stake": 10}, "Nick S": {"h": 2, "a": 0, "stake": 12}, "Dan D": {"h": 2, "a": 0, "stake": 3}, "🤖": {"h": 2, "a": 0, "stake": 23}}}, {"home": "Spain", "away": "Saudi Arabia", "actual": null, "predictions": {"Fred + Teilo": {"h": 3, "a": 0, "stake": 22}, "Rhodri B": {"h": 2, "a": 0, "stake": 15}, "Rhodri W": {"h": 3, "a": 0, "stake": 24}, "Llion": {"h": 2, "a": 0, "stake": 18}, "Nick B": {"h": 3, "a": 0, "stake": 22}, "Ant": {"h": 2, "a": 0, "stake": 22}, "Lane": {"h": 4, "a": 0, "stake": 23}, "Gwil": {"h": 4, "a": 0, "stake": 21}, "Matt": {"h": 3, "a": 0, "stake": 17}, "Liam B": {"h": 3, "a": 0, "stake": 17}, "Gaz T": {"h": 3, "a": 0, "stake": 22}, "Guto": {"h": 4, "a": 1, "stake": 22}, "Gaz E": {"h": 3, "a": 0, "stake": 23}, "Trystan H": {"h": 4, "a": 1, "stake": 23}, "Nick S": {"h": 2, "a": 0, "stake": 20}, "Dan D": {"h": 4, "a": 0, "stake": 22}, "🤖": {"h": 2, "a": 0, "stake": 21}}}, {"home": "Cabo Verde", "away": "Uruguay", "actual": null, "predictions": {"Fred + Teilo": {"h": 0, "a": 1, "stake": 13}, "Rhodri B": {"h": 0, "a": 2, "stake": 7}, "Rhodri W": {"h": 0, "a": 2, "stake": 19}, "Llion": {"h": 1, "a": 2, "stake": 6}, "Nick B": {"h": 0, "a": 4, "stake": 20}, "Ant": {"h": 0, "a": 1, "stake": 9}, "Lane": {"h": 0, "a": 3, "stake": 20}, "Gwil": {"h": 0, "a": 3, "stake": 14}, "Matt": {"h": 0, "a": 2, "stake": 10}, "Liam B": {"h": 0, "a": 3, "stake": 19}, "Gaz T": {"h": 0, "a": 2, "stake": 9}, "Guto": {"h": 0, "a": 2, "stake": 16}, "Gaz E": {"h": 0, "a": 3, "stake": 15}, "Trystan H": {"h": 0, "a": 3, "stake": 14}, "Nick S": {"h": 0, "a": 2, "stake": 19}, "Dan D": {"h": 0, "a": 2, "stake": 14}, "🤖": {"h": 0, "a": 2, "stake": 19}}}, {"home": "France", "away": "Iraq", "actual": null, "predictions": {"Fred + Teilo": {"h": 3, "a": 0, "stake": 23}, "Rhodri B": {"h": 3, "a": 0, "stake": 16}, "Rhodri W": {"h": 3, "a": 0, "stake": 23}, "Llion": {"h": 4, "a": 0, "stake": 24}, "Nick B": {"h": 5, "a": 0, "stake": 23}, "Ant": {"h": 4, "a": 1, "stake": 21}, "Lane": {"h": 4, "a": 0, "stake": 24}, "Gwil": {"h": 4, "a": 0, "stake": 22}, "Matt": {"h": 4, "a": 0, "stake": 24}, "Liam B": {"h": 4, "a": 0, "stake": 22}, "Gaz T": {"h": 3, "a": 0, "stake": 23}, "Guto": {"h": 5, "a": 0, "stake": 24}, "Gaz E": {"h": 4, "a": 0, "stake": 22}, "Trystan H": {"h": 3, "a": 0, "stake": 17}, "Nick S": {"h": 4, "a": 1, "stake": 24}, "Dan D": {"h": 5, "a": 1, "stake": 24}, "🤖": {"h": 3, "a": 0, "stake": 22}}}, {"home": "Senegal", "away": "Norway", "actual": null, "predictions": {"Fred + Teilo": {"h": 2, "a": 2, "stake": 1}, "Rhodri B": {"h": 1, "a": 1, "stake": 6}, "Rhodri W": {"h": 1, "a": 2, "stake": 6}, "Llion": {"h": 1, "a": 1, "stake": 2}, "Nick B": {"h": 2, "a": 2, "stake": 4}, "Ant": {"h": 2, "a": 2, "stake": 4}, "Lane": {"h": 1, "a": 2, "stake": 4}, "Gwil": {"h": 2, "a": 1, "stake": 2}, "Matt": {"h": 1, "a": 2, "stake": 7}, "Liam B": {"h": 2, "a": 2, "stake": 1}, "Gaz T": {"h": 1, "a": 1, "stake": 1}, "Guto": {"h": 1, "a": 1, "stake": 1}, "Gaz E": {"h": 1, "a": 1, "stake": 16}, "Trystan H": {"h": 2, "a": 2, "stake": 1}, "Nick S": {"h": 1, "a": 2, "stake": 1}, "Dan D": {"h": 1, "a": 2, "stake": 13}, "🤖": {"h": 1, "a": 1, "stake": 1}}}, {"home": "Argentina", "away": "Austria", "actual": null, "predictions": {"Fred + Teilo": {"h": 2, "a": 0, "stake": 19}, "Rhodri B": {"h": 2, "a": 0, "stake": 5}, "Rhodri W": {"h": 2, "a": 0, "stake": 13}, "Llion": {"h": 2, "a": 0, "stake": 21}, "Nick B": {"h": 3, "a": 0, "stake": 18}, "Ant": {"h": 2, "a": 0, "stake": 18}, "Lane": {"h": 2, "a": 0, "stake": 15}, "Gwil": {"h": 1, "a": 1, "stake": 5}, "Matt": {"h": 3, "a": 1, "stake": 18}, "Liam B": {"h": 2, "a": 0, "stake": 12}, "Gaz T": {"h": 2, "a": 0, "stake": 20}, "Guto": {"h": 3, "a": 1, "stake": 21}, "Gaz E": {"h": 2, "a": 0, "stake": 20}, "Trystan H": {"h": 3, "a": 0, "stake": 21}, "Nick S": {"h": 3, "a": 0, "stake": 23}, "Dan D": {"h": 3, "a": 1, "stake": 21}, "🤖": {"h": 2, "a": 0, "stake": 17}}}, {"home": "Algeria", "away": "Jordan", "actual": null, "predictions": {"Fred + Teilo": {"h": 1, "a": 1, "stake": 4}, "Rhodri B": {"h": 0, "a": 0, "stake": 4}, "Rhodri W": {"h": 2, "a": 1, "stake": 9}, "Llion": {"h": 2, "a": 1, "stake": 3}, "Nick B": {"h": 3, "a": 0, "stake": 10}, "Ant": {"h": 2, "a": 0, "stake": 10}, "Lane": {"h": 2, "a": 0, "stake": 18}, "Gwil": {"h": 2, "a": 0, "stake": 10}, "Matt": {"h": 1, "a": 0, "stake": 3}, "Liam B": {"h": 3, "a": 1, "stake": 14}, "Gaz T": {"h": 2, "a": 1, "stake": 7}, "Guto": {"h": 2, "a": 0, "stake": 15}, "Gaz E": {"h": 2, "a": 1, "stake": 2}, "Trystan H": {"h": 1, "a": 0, "stake": 2}, "Nick S": {"h": 2, "a": 2, "stake": 2}, "Dan D": {"h": 2, "a": 2, "stake": 1}, "🤖": {"h": 2, "a": 1, "stake": 11}}}, {"home": "Portugal", "away": "Uzbekistan", "actual": null, "predictions": {"Fred + Teilo": {"h": 2, "a": 0, "stake": 20}, "Rhodri B": {"h": 3, "a": 0, "stake": 19}, "Rhodri W": {"h": 3, "a": 1, "stake": 21}, "Llion": {"h": 4, "a": 0, "stake": 22}, "Nick B": {"h": 5, "a": 0, "stake": 19}, "Ant": {"h": 2, "a": 0, "stake": 19}, "Lane": {"h": 3, "a": 0, "stake": 19}, "Gwil": {"h": 3, "a": 0, "stake": 12}, "Matt": {"h": 3, "a": 0, "stake": 20}, "Liam B": {"h": 3, "a": 1, "stake": 21}, "Gaz T": {"h": 4, "a": 0, "stake": 21}, "Guto": {"h": 3, "a": 1, "stake": 17}, "Gaz E": {"h": 4, "a": 0, "stake": 17}, "Trystan H": {"h": 3, "a": 0, "stake": 20}, "Nick S": {"h": 2, "a": 0, "stake": 15}, "Dan D": {"h": 3, "a": 0, "stake": 16}, "🤖": {"h": 2, "a": 0, "stake": 20}}}, {"home": "Colombia", "away": "Congo DR", "actual": null, "predictions": {"Fred + Teilo": {"h": 0, "a": 0, "stake": 5}, "Rhodri B": {"h": 1, "a": 0, "stake": 14}, "Rhodri W": {"h": 2, "a": 0, "stake": 12}, "Llion": {"h": 2, "a": 1, "stake": 4}, "Nick B": {"h": 3, "a": 1, "stake": 16}, "Ant": {"h": 1, "a": 1, "stake": 3}, "Lane": {"h": 2, "a": 1, "stake": 6}, "Gwil": {"h": 3, "a": 0, "stake": 16}, "Matt": {"h": 2, "a": 0, "stake": 15}, "Liam B": {"h": 2, "a": 1, "stake": 13}, "Gaz T": {"h": 2, "a": 0, "stake": 19}, "Guto": {"h": 2, "a": 1, "stake": 13}, "Gaz E": {"h": 2, "a": 1, "stake": 5}, "Trystan H": {"h": 2, "a": 1, "stake": 6}, "Nick S": {"h": 3, "a": 1, "stake": 18}, "Dan D": {"h": 2, "a": 0, "stake": 15}, "🤖": {"h": 2, "a": 1, "stake": 9}}}, {"home": "England", "away": "Ghana", "actual": null, "predictions": {"Fred + Teilo": {"h": 2, "a": 0, "stake": 21}, "Rhodri B": {"h": 3, "a": 0, "stake": 11}, "Rhodri W": {"h": 3, "a": 0, "stake": 20}, "Llion": {"h": 2, "a": 0, "stake": 8}, "Nick B": {"h": 3, "a": 1, "stake": 5}, "Ant": {"h": 2, "a": 0, "stake": 17}, "Lane": {"h": 3, "a": 1, "stake": 16}, "Gwil": {"h": 1, "a": 0, "stake": 13}, "Matt": {"h": 3, "a": 1, "stake": 16}, "Liam B": {"h": 4, "a": 0, "stake": 20}, "Gaz T": {"h": 2, "a": 1, "stake": 14}, "Guto": {"h": 3, "a": 2, "stake": 8}, "Gaz E": {"h": 2, "a": 1, "stake": 21}, "Trystan H": {"h": 2, "a": 0, "stake": 15}, "Nick S": {"h": 3, "a": 0, "stake": 22}, "Dan D": {"h": 3, "a": 1, "stake": 20}, "🤖": {"h": 2, "a": 0, "stake": 4}}}, {"home": "Croatia", "away": "Panama", "actual": null, "predictions": {"Fred + Teilo": {"h": 1, "a": 0, "stake": 14}, "Rhodri B": {"h": 4, "a": 0, "stake": 22}, "Rhodri W": {"h": 2, "a": 0, "stake": 11}, "Llion": {"h": 3, "a": 1, "stake": 7}, "Nick B": {"h": 3, "a": 0, "stake": 17}, "Ant": {"h": 4, "a": 1, "stake": 20}, "Lane": {"h": 2, "a": 1, "stake": 5}, "Gwil": {"h": 3, "a": 0, "stake": 17}, "Matt": {"h": 2, "a": 0, "stake": 14}, "Liam B": {"h": 3, "a": 0, "stake": 18}, "Gaz T": {"h": 2, "a": 0, "stake": 18}, "Guto": {"h": 2, "a": 1, "stake": 10}, "Gaz E": {"h": 3, "a": 1, "stake": 6}, "Trystan H": {"h": 3, "a": 0, "stake": 16}, "Nick S": {"h": 2, "a": 0, "stake": 10}, "Dan D": {"h": 2, "a": 0, "stake": 6}, "🤖": {"h": 2, "a": 1, "stake": 12}}}]}]};
+const STORAGE_KEY = "wc2026_live_scores_v1";
+
+function loadOverrides() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+  catch (e) { return {}; }
+}
+function saveOverrides(overrides) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides)); }
+  catch (e) { /* localStorage unavailable (private mode, opaque origin, etc.) — continue in-memory only */ }
+}
+let overrides = loadOverrides(); // { "mwIndex_fixtureIndex": {h, a} }
+let unlockedKeys = new Set(); // fixtures temporarily reopened for editing this session (not persisted)
+
+function getActual(mwIndex, fixIndex, fixture) {
+  const key = mwIndex + "_" + fixIndex;
+  if (overrides[key] && (overrides[key].h !== "" && overrides[key].a !== "")) {
+    return { h: Number(overrides[key].h), a: Number(overrides[key].a) };
+  }
+  if (overrides[key] && (overrides[key].h === "" || overrides[key].a === "")) {
+    return null;
+  }
+  return fixture.actual; // fall back to source data
+}
+
+function outcome(h, a) {
+  if (h > a) return "H";
+  if (h < a) return "A";
+  return "D";
+}
+
+const MATCHWEEK_WINNER_BONUS = 5;
+
+// Correct result = +stake. Exact correct score = +stake doubled. Wrong result = -stake.
+function gradeFixture(pred, actual) {
+  if (!actual) return null;
+  const correct = outcome(pred.h, pred.a) === outcome(actual.h, actual.a);
+  if (!correct) return { pts: -pred.stake, correct: false, exact: false };
+  const exact = pred.h === actual.h && pred.a === actual.a;
+  return { pts: exact ? pred.stake * 2 : pred.stake, correct: true, exact };
+}
+
+// Matchweek-leader bonus tie-break, in order: (1) highest matchweek points (doubled scores count),
+// (2) most exact/correct scores that matchweek, (3) highest matchweek points if exact scores were
+// NOT doubled. Anyone still tied after all three levels shares the bonus.
+function pickMatchweekLeaders(totals, mwIndex) {
+  let candidates = DATA.players.slice();
+  const byMw = p => totals[p].byMw[mwIndex];
+  const exactByMw = p => totals[p].exactByMw[mwIndex];
+  const baseByMw = p => totals[p].baseByMw[mwIndex];
+
+  const narrow = (keyFn) => {
+    const max = Math.max(...candidates.map(keyFn));
+    candidates = candidates.filter(p => keyFn(p) === max);
+  };
+
+  narrow(byMw);
+  if (candidates.length > 1) narrow(exactByMw);
+  if (candidates.length > 1) narrow(baseByMw);
+  return candidates;
+}
+
+function computeTotals() {
+  const totals = {};
+  DATA.players.forEach(p => totals[p] = {
+    byMw: {}, baseByMw: {}, exactByMw: {}, bonusMw: {}, liveLeadMw: {},
+    total: 0, correct: 0, exactCount: 0, wrong: 0, pending: 0,
+  });
+
+  DATA.matchweeks.forEach((mw, mwIndex) => {
+    DATA.players.forEach(p => {
+      totals[p].byMw[mwIndex] = 0;
+      totals[p].baseByMw[mwIndex] = 0;
+      totals[p].exactByMw[mwIndex] = 0;
+    });
+    let anyResolved = false, allResolved = true;
+    mw.fixtures.forEach((fixture, fixIndex) => {
+      const actual = getActual(mwIndex, fixIndex, fixture);
+      if (actual) anyResolved = true; else allResolved = false;
+      DATA.players.forEach(p => {
+        const pred = fixture.predictions[p];
+        const g = gradeFixture(pred, actual);
+        if (g === null) {
+          totals[p].pending++;
+        } else {
+          totals[p].byMw[mwIndex] += g.pts;
+          totals[p].baseByMw[mwIndex] += g.exact ? pred.stake : g.pts;
+          if (g.exact) { totals[p].exactByMw[mwIndex]++; totals[p].exactCount++; }
+          if (g.correct) totals[p].correct++; else totals[p].wrong++;
+        }
+      });
+    });
+    // Matchweek winner bonus: final only -- awarded once every fixture in the matchweek is resolved,
+    // so the +5 (and the leaderboard total it feeds into) never flips mid-week as results come in.
+    // While the matchweek is still open, the current pace-setter is only marked with liveLeadMw
+    // (an outline, no points) so the live total can't be misread as locked in.
+    DATA.players.forEach(p => { totals[p].bonusMw[mwIndex] = 0; totals[p].liveLeadMw[mwIndex] = false; });
+    if (anyResolved) {
+      const leaders = pickMatchweekLeaders(totals, mwIndex);
+      DATA.players.forEach(p => {
+        if (!leaders.includes(p)) return;
+        if (allResolved) totals[p].bonusMw[mwIndex] = MATCHWEEK_WINNER_BONUS;
+        else totals[p].liveLeadMw[mwIndex] = true;
+      });
+    }
+  });
+
+  DATA.players.forEach(p => {
+    totals[p].total = DATA.matchweeks.reduce((s, mw, mi) => s + totals[p].byMw[mi] + totals[p].bonusMw[mi], 0);
+  });
+
+  return totals;
+}
+
+function renderLeaderboard() {
+  const totals = computeTotals();
+  const rows = DATA.players.map(p => ({ player: p, ...totals[p] }));
+  rows.sort((a, b) => b.total - a.total || a.player.localeCompare(b.player));
+
+  const head = document.getElementById("leaderboard-head");
+  head.innerHTML = "<th>#</th><th>Player</th>" +
+    DATA.matchweeks.map((mw, i) => `<th class="num">${mw.name}</th>`).join("") +
+    `<th class="num">Total</th><th class="num">Correct</th><th class="num">Exact</th><th class="num">Pending</th>`;
+
+  const body = document.getElementById("leaderboard-body");
+  body.innerHTML = rows.map((r, i) => {
+    const totalClass = r.total > 0 ? "total-pos" : (r.total < 0 ? "total-neg" : "");
+    const mwCells = DATA.matchweeks.map((mw, mi) => {
+      const v = r.byMw[mi] + r.bonusMw[mi];
+      const display = `${v > 0 ? "+" : ""}${v}`;
+      if (r.bonusMw[mi] > 0) {
+        return `<td class="num"><span class="mw-leader-box" title="Matchweek winner: +${MATCHWEEK_WINNER_BONUS} bonus included">${display}</span></td>`;
+      }
+      if (r.liveLeadMw[mi]) {
+        return `<td class="num"><span class="mw-live-lead-box" title="Currently leading this matchweek — bonus not awarded until every fixture is resolved">${display}</span></td>`;
+      }
+      const cls = v > 0 ? "total-pos" : (v < 0 ? "total-neg" : "");
+      return `<td class="num ${cls}">${display}</td>`;
+    }).join("");
+    return `<tr>
+      <td><span class="rank-badge">${i + 1}</span></td>
+      <td>${r.player}</td>
+      ${mwCells}
+      <td class="num ${totalClass}">${r.total > 0 ? "+" : ""}${r.total}</td>
+      <td class="num">${r.correct}</td>
+      <td class="num">${r.exactCount}</td>
+      <td class="num">${r.pending}</td>
+    </tr>`;
+  }).join("");
+
+  const totalGames = DATA.matchweeks.reduce((s, mw) => s + mw.fixtures.length, 0);
+  const resolved = totalGames - (rows[0] ? rows[0].pending : 0);
+  document.getElementById("leaderboard-meta").textContent =
+    `${resolved} of ${totalGames} fixtures resolved`;
+}
+
+function fixtureKey(mwIndex, fixIndex) { return mwIndex + "_" + fixIndex; }
+
+function onScoreInput(mwIndex, fixIndex, side, value) {
+  const key = fixtureKey(mwIndex, fixIndex);
+  const current = overrides[key] || { h: "", a: "" };
+  current[side] = value;
+  overrides[key] = current;
+  saveOverrides(overrides);
+  flashSaveStatus();
+  // Don't fully re-render here — that would destroy the input the user is actively typing
+  // into and steal focus after every keystroke. The leaderboard is cheap to refresh live;
+  // the per-game table (and the lock/unlock decision) catches up on blur, see onActualBlur.
+  renderLeaderboard();
+}
+
+function onActualBlur(mwIndex, fixIndex) {
+  const key = fixtureKey(mwIndex, fixIndex);
+  setTimeout(() => {
+    const wrap = document.querySelector(`[data-actual-wrap="${key}"]`);
+    if (wrap && wrap.contains(document.activeElement)) return; // focus moved to the sibling input — not done yet
+    unlockedKeys.delete(key);
+    renderAll();
+  }, 0);
+}
+
+let saveTimer = null;
+function flashSaveStatus() {
+  const el = document.getElementById("save-status");
+  el.textContent = "Saved " + new Date().toLocaleTimeString();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { el.textContent = ""; }, 3000);
+}
+
+function renderActualCell(mwIndex, fixIndex, hVal, aVal) {
+  const key = fixtureKey(mwIndex, fixIndex);
+  const hasValue = hVal !== "" && aVal !== "";
+  const locked = hasValue && !unlockedKeys.has(key);
+
+  if (locked) {
+    return `<div class="actual-wrap" data-actual-wrap="${key}">
+      <span class="actual-badge" data-key="${key}" tabindex="0" title="Click to correct this result">${hVal}-${aVal} <span class="edit-pencil">✎</span></span>
+    </div>`;
+  }
+  return `<div class="actual-wrap" data-actual-wrap="${key}">
+    <input type="number" min="0" max="20" class="score-input" data-mw="${mwIndex}" data-fix="${fixIndex}" data-side="h" value="${hVal}">
+    <span class="score-sep">-</span>
+    <input type="number" min="0" max="20" class="score-input" data-mw="${mwIndex}" data-fix="${fixIndex}" data-side="a" value="${aVal}">
+  </div>`;
+}
+
+function renderMatchweekTable(mw, mwIndex) {
+  const playerHeaders = DATA.players.map(p => `<th>${p}</th>`).join("");
+  const rows = mw.fixtures.map((fixture, fixIndex) => {
+    const actual = getActual(mwIndex, fixIndex, fixture);
+    const key = fixtureKey(mwIndex, fixIndex);
+    const ov = overrides[key] || {};
+    const hVal = ov.h !== undefined ? ov.h : (fixture.actual ? fixture.actual.h : "");
+    const aVal = ov.a !== undefined ? ov.a : (fixture.actual ? fixture.actual.a : "");
+
+    const cells = DATA.players.map(p => {
+      const pred = fixture.predictions[p];
+      const g = gradeFixture(pred, actual);
+      let cls, ptsHtml;
+      if (g === null) {
+        cls = "pending";
+        ptsHtml = `<div class="pts-line pending">(${pred.stake})</div>`;
+      } else if (g.exact) {
+        cls = "exact";
+        ptsHtml = `<div class="pts-line exact">+${g.pts} ✦</div>`;
+      } else if (g.correct) {
+        cls = "correct";
+        ptsHtml = `<div class="pts-line correct">+${g.pts}</div>`;
+      } else {
+        cls = "wrong";
+        ptsHtml = `<div class="pts-line wrong">${g.pts}</div>`;
+      }
+      return `<td class="player-cell ${cls}">
+        <div class="pred-line">${pred.h}-${pred.a}</div>
+        ${ptsHtml}
+      </td>`;
+    }).join("");
+
+    return `<tr>
+      <td class="col-fixture">${fixture.home} <span style="color:#aaa;">v</span> ${fixture.away}</td>
+      <td class="col-actual">${renderActualCell(mwIndex, fixIndex, hVal, aVal)}</td>
+      ${cells}
+    </tr>`;
+  }).join("");
+
+  return `<div class="table-scroll">
+    <table class="games">
+      <thead>
+        <tr>
+          <th class="col-fixture">Fixture</th>
+          <th class="col-actual">Actual</th>
+          ${playerHeaders}
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function renderPanels() {
+  const tabs = document.getElementById("tabs");
+  const panels = document.getElementById("panels");
+  tabs.innerHTML = DATA.matchweeks.map((mw, i) =>
+    `<button class="tab-btn ${i === activeTab ? "active" : ""}" data-tab="${i}">${mw.name}</button>`
+  ).join("");
+  panels.innerHTML = DATA.matchweeks.map((mw, i) =>
+    `<div class="mw-panel ${i === activeTab ? "active" : ""}" data-panel="${i}">${renderMatchweekTable(mw, i)}</div>`
+  ).join("");
+
+  tabs.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      activeTab = Number(btn.dataset.tab);
+      renderPanels();
+      attachInputListeners();
+    });
+  });
+  attachInputListeners();
+}
+
+function attachInputListeners() {
+  document.querySelectorAll(".score-input").forEach(input => {
+    const mw = Number(input.dataset.mw), fix = Number(input.dataset.fix);
+    input.addEventListener("input", () => {
+      onScoreInput(mw, fix, input.dataset.side, input.value);
+    });
+    input.addEventListener("blur", () => onActualBlur(mw, fix));
+  });
+  document.querySelectorAll(".actual-badge").forEach(badge => {
+    badge.addEventListener("click", () => {
+      unlockedKeys.add(badge.dataset.key);
+      renderAll();
+    });
+  });
+}
+
+// --- Live score fetching (Wikipedia group-stage pages, no API key, CORS-enabled) ---
+
+const TEAM_CODE = {
+  "Algeria": "ALG", "Argentina": "ARG", "Australia": "AUS", "Austria": "AUT", "Belgium": "BEL",
+  "Bosnia and Herzegovina": "BIH", "Brazil": "BRA", "Cabo Verde": "CPV", "Canada": "CAN",
+  "Colombia": "COL", "Congo DR": "COD", "Croatia": "CRO", "Curaçao": "CUW", "Czechia": "CZE",
+  "Côte d'Ivoire": "CIV", "Ecuador": "ECU", "Egypt": "EGY", "England": "ENG", "France": "FRA",
+  "Germany": "GER", "Ghana": "GHA", "Haiti": "HAI", "IR Iran": "IRN", "Iraq": "IRQ", "Japan": "JPN",
+  "Jordan": "JOR", "Korea Republic": "KOR", "South Korea": "KOR", "Mexico": "MEX", "Morocco": "MAR",
+  "Netherlands": "NED", "New Zealand": "NZL", "Norway": "NOR", "Panama": "PAN", "Paraguay": "PAR",
+  "Portugal": "POR", "Qatar": "QAT", "Saudi Arabia": "KSA", "Scotland": "SCO", "Senegal": "SEN",
+  "South Africa": "RSA", "Spain": "ESP", "Sweden": "SWE", "Switzerland": "SUI", "Tunisia": "TUN",
+  "Türkiye": "TUR", "United States": "USA", "Uruguay": "URU", "Uzbekistan": "UZB",
+};
+const WIKI_GROUPS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+
+// Wikipedia's group-stage pages store each result as a balanced {{#invoke:football box|main ... }}
+// template call, which can contain nested {{...}} (flags, score links) — a regex alone can't safely
+// find the end of the block, so we scan brace depth manually.
+function findInvokeBlocks(text, marker) {
+  const blocks = [];
+  let start = 0;
+  while (true) {
+    const idx = text.indexOf(marker, start);
+    if (idx === -1) break;
+    let depth = 0, i = idx;
+    while (i < text.length) {
+      if (text.slice(i, i + 2) === "{{") { depth++; i += 2; }
+      else if (text.slice(i, i + 2) === "}}") { depth--; i += 2; if (depth === 0) break; }
+      else i++;
+    }
+    blocks.push(text.slice(idx, i));
+    start = i;
+  }
+  return blocks;
+}
+
+function parseGroupWikitext(wikitext) {
+  const blocks = findInvokeBlocks(wikitext, "{{#invoke:football box|main");
+  const results = [];
+  for (const b of blocks) {
+    const t1 = b.match(/team1=\{\{#invoke:flag\|[a-z-]+\|([A-Za-z]+)\}\}/);
+    const t2 = b.match(/team2=\{\{#invoke:flag\|[a-z-]+\|([A-Za-z]+)\}\}/);
+    const sb = b.match(/score=(\{\{score link\|[\s\S]*?\}\})/);
+    if (!t1 || !t2 || !sb) continue;
+    const parts = sb[1].split("|");
+    const last = parts[parts.length - 1].replace(/\}+$/, "").trim();
+    const m = last.match(/^(\d+)[‒–—-](\d+)$/); // not-yet-played shows as "Match NN", no score
+    if (!m) continue;
+    results.push({ code1: t1[1], code2: t2[1], h: Number(m[1]), a: Number(m[2]) });
+  }
+  return results;
+}
+
+async function fetchLiveScores() {
+  const btn = document.getElementById("fetch-btn");
+  const status = document.getElementById("fetch-status");
+  btn.disabled = true;
+  status.textContent = "Fetching from Wikipedia…";
+
+  const allResults = [];
+  const failedGroups = [];
+  await Promise.all(WIKI_GROUPS.map(async (g) => {
+    try {
+      const url = `https://en.wikipedia.org/w/api.php?action=parse&page=2026_FIFA_World_Cup_Group_${g}&prop=wikitext&format=json&origin=*`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!data || !data.parse) throw new Error("bad response");
+      allResults.push(...parseGroupWikitext(data.parse.wikitext["*"]));
+    } catch (e) {
+      failedGroups.push(g);
+    }
+  }));
+
+  // Wikipedia is treated as the source of truth: any fixture it has a confirmed score for gets set
+  // to match, whether that fixture was blank or already had a (possibly wrong) value. Fixtures
+  // Wikipedia hasn't confirmed yet (still shows a "Match NN" placeholder) are left exactly as they are.
+  let added = 0, corrected = 0;
+  const addedDesc = [], correctedDesc = [];
+  DATA.matchweeks.forEach((mw, mwIndex) => {
+    mw.fixtures.forEach((fixture, fixIndex) => {
+      const key = fixtureKey(mwIndex, fixIndex);
+      const ov = overrides[key] || {};
+      const existingH = ov.h !== undefined ? ov.h : (fixture.actual ? fixture.actual.h : "");
+      const existingA = ov.a !== undefined ? ov.a : (fixture.actual ? fixture.actual.a : "");
+      const hasExisting = existingH !== "" && existingA !== "";
+
+      const homeCode = TEAM_CODE[fixture.home];
+      const awayCode = TEAM_CODE[fixture.away];
+      if (!homeCode || !awayCode) return;
+
+      const match = allResults.find(r =>
+        (r.code1 === homeCode && r.code2 === awayCode) || (r.code1 === awayCode && r.code2 === homeCode)
+      );
+      if (!match) return; // Wikipedia doesn't have a confirmed score for this one yet — leave it alone
+
+      const h = match.code1 === homeCode ? match.h : match.a;
+      const a = match.code1 === homeCode ? match.a : match.h;
+      if (hasExisting && Number(existingH) === h && Number(existingA) === a) return; // already correct
+
+      overrides[key] = { h: String(h), a: String(a), source: "fetch" };
+      unlockedKeys.delete(key); // re-lock with the corrected value if it was open for editing
+      if (hasExisting) {
+        corrected++;
+        correctedDesc.push(`${fixture.home} ${h}-${a} ${fixture.away} (was ${existingH}-${existingA})`);
+      } else {
+        added++;
+        addedDesc.push(`${fixture.home} ${h}-${a} ${fixture.away}`);
+      }
+    });
+  });
+
+  saveOverrides(overrides);
+  btn.disabled = false;
+
+  if (failedGroups.length === WIKI_GROUPS.length) {
+    status.textContent = "Couldn't reach Wikipedia — check your internet connection and try again.";
+  } else if (added === 0 && corrected === 0) {
+    status.textContent = failedGroups.length
+      ? `No changes (groups ${failedGroups.join(", ")} failed to load — try again).`
+      : "No changes — everything matches the official results.";
+  } else {
+    const parts = [];
+    if (added) parts.push(`added ${added} new result${added === 1 ? "" : "s"} (${addedDesc.join(", ")})`);
+    if (corrected) parts.push(`corrected ${corrected} ${corrected === 1 ? "entry" : "entries"} that didn't match the official result (${correctedDesc.join(", ")})`);
+    status.textContent = parts.join("; ") + "." +
+      (failedGroups.length ? ` (Groups ${failedGroups.join(", ")} failed to load — try again to pick those up.)` : "");
+  }
+  renderAll();
+}
+
+document.getElementById("fetch-btn").addEventListener("click", fetchLiveScores);
+
+let activeTab = 0;
+
+function renderAll() {
+  renderLeaderboard();
+  renderPanels();
+}
+
+document.getElementById("reset-btn").addEventListener("click", () => {
+  if (confirm("Clear all scores you've entered in this browser and revert to the original source data?")) {
+    overrides = {};
+    saveOverrides(overrides);
+    renderAll();
+  }
+});
+
+renderAll();
+</script>
+
+</body>
+</html>

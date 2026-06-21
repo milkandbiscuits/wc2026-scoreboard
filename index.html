@@ -354,6 +354,7 @@
   }
   @media (max-width: 700px) and (orientation: portrait) {
     .rotate-banner { display: flex; }
+    .next-fixture-card { display: none; }
   }
 </style>
 </head>
@@ -388,6 +389,8 @@
 </div>
 
 <div class="container">
+
+  <div class="card next-fixture-card" id="next-fixture-card"></div>
 
   <div class="card">
     <div class="card-title">
@@ -672,44 +675,49 @@ function renderActualCell(mwIndex, fixIndex, hVal, aVal) {
   </div>`;
 }
 
-function renderMatchweekTable(mw, mwIndex) {
-  const playerHeaders = DATA.players.map(p => `<th>${playerLabel(p, "header-mug")}</th>`).join("");
-  const rows = mw.fixtures.map((fixture, fixIndex) => {
-    const actual = getActual(mwIndex, fixIndex, fixture);
-    const key = fixtureKey(mwIndex, fixIndex);
-    const ov = overrides[key] || {};
-    const hVal = ov.h !== undefined ? ov.h : (fixture.actual ? fixture.actual.h : "");
-    const aVal = ov.a !== undefined ? ov.a : (fixture.actual ? fixture.actual.a : "");
+function playerHeadersHtml() {
+  return DATA.players.map(p => `<th>${playerLabel(p, "header-mug")}</th>`).join("");
+}
 
-    const cells = DATA.players.map(p => {
-      const pred = fixture.predictions[p];
-      const g = gradeFixture(pred, actual);
-      let cls, ptsHtml;
-      if (g === null) {
-        cls = "pending";
-        ptsHtml = `<div class="pts-line pending">(${pred.stake})</div>`;
-      } else if (g.exact) {
-        cls = "exact";
-        ptsHtml = `<div class="pts-line exact">+${g.pts} ✦</div>`;
-      } else if (g.correct) {
-        cls = "correct";
-        ptsHtml = `<div class="pts-line correct">+${g.pts}</div>`;
-      } else {
-        cls = "wrong";
-        ptsHtml = `<div class="pts-line wrong">${g.pts}</div>`;
-      }
-      return `<td class="player-cell ${cls}">
-        <div class="pred-line">${pred.h}-${pred.a}</div>
-        ${ptsHtml}
-      </td>`;
-    }).join("");
+function renderFixtureRow(mwIndex, fixIndex, fixture) {
+  const actual = getActual(mwIndex, fixIndex, fixture);
+  const key = fixtureKey(mwIndex, fixIndex);
+  const ov = overrides[key] || {};
+  const hVal = ov.h !== undefined ? ov.h : (fixture.actual ? fixture.actual.h : "");
+  const aVal = ov.a !== undefined ? ov.a : (fixture.actual ? fixture.actual.a : "");
 
-    return `<tr>
-      <td class="col-fixture">${fixture.home} <span style="color:#aaa;">v</span> ${fixture.away}<div class="kickoff-time">${formatKickoff(fixture.kickoff)}</div></td>
-      <td class="col-actual">${renderActualCell(mwIndex, fixIndex, hVal, aVal)}</td>
-      ${cells}
-    </tr>`;
+  const cells = DATA.players.map(p => {
+    const pred = fixture.predictions[p];
+    const g = gradeFixture(pred, actual);
+    let cls, ptsHtml;
+    if (g === null) {
+      cls = "pending";
+      ptsHtml = `<div class="pts-line pending">(${pred.stake})</div>`;
+    } else if (g.exact) {
+      cls = "exact";
+      ptsHtml = `<div class="pts-line exact">+${g.pts} ✦</div>`;
+    } else if (g.correct) {
+      cls = "correct";
+      ptsHtml = `<div class="pts-line correct">+${g.pts}</div>`;
+    } else {
+      cls = "wrong";
+      ptsHtml = `<div class="pts-line wrong">${g.pts}</div>`;
+    }
+    return `<td class="player-cell ${cls}">
+      <div class="pred-line">${pred.h}-${pred.a}</div>
+      ${ptsHtml}
+    </td>`;
   }).join("");
+
+  return `<tr>
+    <td class="col-fixture">${fixture.home} <span style="color:#aaa;">v</span> ${fixture.away}<div class="kickoff-time">${formatKickoff(fixture.kickoff)}</div></td>
+    <td class="col-actual">${renderActualCell(mwIndex, fixIndex, hVal, aVal)}</td>
+    ${cells}
+  </tr>`;
+}
+
+function renderMatchweekTable(mw, mwIndex) {
+  const rows = mw.fixtures.map((fixture, fixIndex) => renderFixtureRow(mwIndex, fixIndex, fixture)).join("");
 
   return `<div class="table-scroll">
     <table class="games">
@@ -717,12 +725,51 @@ function renderMatchweekTable(mw, mwIndex) {
         <tr>
           <th class="col-fixture">Fixture</th>
           <th class="col-actual">Actual</th>
-          ${playerHeaders}
+          ${playerHeadersHtml()}
         </tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;
+}
+
+// The single soonest fixture across every matchweek that doesn't have a result yet -- whatever
+// game someone's most likely about to need to update.
+function findNextFixture() {
+  let best = null;
+  DATA.matchweeks.forEach((mw, mwIndex) => {
+    mw.fixtures.forEach((fixture, fixIndex) => {
+      if (getActual(mwIndex, fixIndex, fixture)) return;
+      if (!best || fixture.kickoff < best.fixture.kickoff) {
+        best = { mwIndex, fixIndex, fixture };
+      }
+    });
+  });
+  return best;
+}
+
+function renderNextFixtureCard() {
+  const card = document.getElementById("next-fixture-card");
+  const next = findNextFixture();
+  if (!next) {
+    card.innerHTML = `<div class="card-title">Next Fixture</div><p style="padding:14px 18px;color:#777;">Every fixture's been played — nothing left for Gwil to argue about.</p>`;
+    return;
+  }
+  const row = renderFixtureRow(next.mwIndex, next.fixIndex, next.fixture);
+  card.innerHTML = `
+    <div class="card-title">Next Fixture<span class="meta">${DATA.matchweeks[next.mwIndex].name}</span></div>
+    <div class="table-scroll">
+      <table class="games">
+        <thead>
+          <tr>
+            <th class="col-fixture">Fixture</th>
+            <th class="col-actual">Actual</th>
+            ${playerHeadersHtml()}
+          </tr>
+        </thead>
+        <tbody>${row}</tbody>
+      </table>
+    </div>`;
 }
 
 // Tournament bracket picks (Champions, Golden Boot, etc.) -- reference only, not scored here.
@@ -1008,6 +1055,7 @@ let activeTab = DATA.matchweeks.length - 1; // default to the latest matchweek, 
 
 function renderAll() {
   renderLeaderboard();
+  renderNextFixtureCard();
   renderPanels();
 }
 

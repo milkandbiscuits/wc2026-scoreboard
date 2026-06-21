@@ -631,6 +631,7 @@ function onScoreInput(mwIndex, fixIndex, side, value) {
   const key = fixtureKey(mwIndex, fixIndex);
   const current = overrides[key] || { h: "", a: "" };
   current[side] = value;
+  delete current.source; // a manual edit means this is no longer purely a Wikipedia-fetched value
   overrides[key] = current;
   saveOverrides(overrides);
   flashSaveStatus();
@@ -1095,8 +1096,10 @@ function renderAll() {
 }
 
 document.getElementById("reset-btn").addEventListener("click", () => {
-  if (confirm("Clear all scores you've entered in this browser and revert to the original source data?")) {
-    overrides = {};
+  if (confirm("Clear scores you've manually typed in? Results already confirmed via Wikipedia are left alone.")) {
+    Object.keys(overrides).forEach(key => {
+      if (overrides[key].source !== "fetch") delete overrides[key];
+    });
     saveOverrides(overrides);
     renderAll();
   }

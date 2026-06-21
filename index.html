@@ -748,16 +748,37 @@ function findNextFixture() {
   return best;
 }
 
+let pinnedNextFixtureKey = null;
+
 function renderNextFixtureCard() {
   const card = document.getElementById("next-fixture-card");
-  const next = findNextFixture();
-  if (!next) {
+
+  // Stay pinned to whichever fixture we're already showing, even once it's been resolved --
+  // otherwise entering a score yanks it away to the next game before you get to see everyone's
+  // results, which on a phone just looks like your tap didn't register.
+  let target = null;
+  if (pinnedNextFixtureKey) {
+    const [mwIndex, fixIndex] = pinnedNextFixtureKey.split("_").map(Number);
+    target = { mwIndex, fixIndex, fixture: DATA.matchweeks[mwIndex].fixtures[fixIndex] };
+  }
+  if (!target) {
+    target = findNextFixture();
+    if (target) pinnedNextFixtureKey = fixtureKey(target.mwIndex, target.fixIndex);
+  }
+
+  if (!target) {
     card.innerHTML = `<div class="card-title">Next Fixture</div><p style="padding:14px 18px;color:#777;">Every fixture's been played — nothing left for Gwil to argue about.</p>`;
     return;
   }
-  const row = renderFixtureRow(next.mwIndex, next.fixIndex, next.fixture);
+
+  const resolved = !!getActual(target.mwIndex, target.fixIndex, target.fixture);
+  const row = renderFixtureRow(target.mwIndex, target.fixIndex, target.fixture);
+  const advanceBtn = resolved
+    ? `<button class="reset-btn" id="next-fixture-advance" style="margin:12px 18px;">Show next fixture →</button>`
+    : "";
+
   card.innerHTML = `
-    <div class="card-title">Next Fixture<span class="meta">${DATA.matchweeks[next.mwIndex].name}</span></div>
+    <div class="card-title">Next Fixture<span class="meta">${DATA.matchweeks[target.mwIndex].name}</span></div>
     <div class="table-scroll">
       <table class="games">
         <thead>
@@ -769,7 +790,16 @@ function renderNextFixtureCard() {
         </thead>
         <tbody>${row}</tbody>
       </table>
-    </div>`;
+    </div>
+    ${advanceBtn}`;
+
+  const advanceBtnEl = document.getElementById("next-fixture-advance");
+  if (advanceBtnEl) {
+    advanceBtnEl.addEventListener("click", () => {
+      pinnedNextFixtureKey = null;
+      renderAll();
+    });
+  }
 }
 
 // Tournament bracket picks (Champions, Golden Boot, etc.) -- reference only, not scored here.
@@ -838,6 +868,11 @@ function attachInputListeners() {
       onScoreInput(mw, fix, input.dataset.side, input.value);
     });
     input.addEventListener("blur", () => onActualBlur(mw, fix));
+    // Mobile keyboards' "Enter"/"Done" key doesn't blur the field on its own in most browsers --
+    // force it so tapping Enter actually confirms the score the same way tapping away does.
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") input.blur();
+    });
   });
   document.querySelectorAll(".actual-badge").forEach(badge => {
     badge.addEventListener("click", () => {

@@ -716,23 +716,58 @@ function setFetchButtonsDisabled(disabled) {
   document.querySelectorAll(".js-fetch-btn").forEach(el => { el.disabled = disabled; });
 }
 
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Firing all 12 group requests at once trips Wikipedia's anonymous-traffic rate limiting, which then
+// fails some (or all) of them with no useful error -- silently missing whatever results were in those
+// groups. Keeping only a few requests in flight at a time, with retries and backoff on top, makes this
+// reliable instead of flaky.
+async function fetchGroupWithRetry(g, attempts = 5) {
+  const url = `https://en.wikipedia.org/w/api.php?action=parse&page=2026_FIFA_World_Cup_Group_${g}&prop=wikitext&format=json&origin=*`;
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data || !data.parse) throw new Error("bad response");
+      return parseGroupWikitext(data.parse.wikitext["*"]);
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) await sleep(700 * (i + 1) + Math.random() * 400); // backoff with jitter before retrying
+    }
+  }
+  throw lastErr;
+}
+
+const FETCH_CONCURRENCY = 3;
+
+async function fetchAllGroups() {
+  const allResults = [];
+  const failedGroups = [];
+  const queue = WIKI_GROUPS.slice();
+
+  async function worker() {
+    while (queue.length) {
+      const g = queue.shift();
+      try {
+        allResults.push(...await fetchGroupWithRetry(g));
+      } catch (e) {
+        failedGroups.push(g);
+      }
+      await sleep(300); // small gap before this worker's next request
+    }
+  }
+
+  await Promise.all(Array.from({ length: FETCH_CONCURRENCY }, worker));
+  return { allResults, failedGroups };
+}
+
 async function fetchLiveScores() {
   setFetchButtonsDisabled(true);
   setFetchStatus("Fetching from Wikipedia…");
 
-  const allResults = [];
-  const failedGroups = [];
-  await Promise.all(WIKI_GROUPS.map(async (g) => {
-    try {
-      const url = `https://en.wikipedia.org/w/api.php?action=parse&page=2026_FIFA_World_Cup_Group_${g}&prop=wikitext&format=json&origin=*`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!data || !data.parse) throw new Error("bad response");
-      allResults.push(...parseGroupWikitext(data.parse.wikitext["*"]));
-    } catch (e) {
-      failedGroups.push(g);
-    }
-  }));
+  const { allResults, failedGroups } = await fetchAllGroups();
 
   // Wikipedia is treated as the source of truth: any fixture it has a confirmed score for gets set
   // to match, whether that fixture was blank or already had a (possibly wrong) value. Fixtures

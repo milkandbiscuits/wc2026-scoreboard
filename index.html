@@ -311,6 +311,50 @@
   .tagline { margin: 4px 0 0; font-size: 13px; color: #c7d0e0; font-style: italic; }
   .leaderboard-mug { height: 34px; width: auto; vertical-align: middle; }
   .header-mug { height: 28px; width: auto; vertical-align: middle; }
+
+  .rotate-banner {
+    display: none;
+    position: relative;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 12px;
+    background: #fff4d6;
+    color: #6b4e00;
+    padding: 10px 40px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .rotate-icon {
+    display: inline-block;
+    height: 26px;
+    width: auto;
+    vertical-align: middle;
+    margin-right: 2px;
+    transform-origin: 50% 70%;
+    animation: rotate-wave 1.6s ease-in-out infinite;
+  }
+  @keyframes rotate-wave {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-18deg); }
+    75% { transform: rotate(18deg); }
+  }
+  #rotate-dismiss {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    color: inherit;
+    flex-shrink: 0;
+  }
+  @media (max-width: 700px) and (orientation: portrait) {
+    .rotate-banner { display: flex; }
+  }
 </style>
 </head>
 <body>
@@ -337,6 +381,11 @@
        refresh fixtures button and everything else sorts itself out.</p>
   </details>
 </header>
+
+<div class="rotate-banner" id="rotate-banner">
+  <span><img id="rotate-mug" class="rotate-icon" alt=""> Gwil insists you rotate your phone to see all his stats.</span>
+  <button id="rotate-dismiss" aria-label="Dismiss">×</button>
+</div>
 
 <div class="container">
 
@@ -969,6 +1018,11 @@ document.getElementById("reset-btn").addEventListener("click", () => {
     renderAll();
   }
 });
+
+document.getElementById("rotate-dismiss").addEventListener("click", () => {
+  document.getElementById("rotate-banner").style.display = "none";
+});
+document.getElementById("rotate-mug").src = getGwilMugSrc();
 
 renderAll();
 fetchLiveScores(); // auto-check Wikipedia for the latest results as soon as the page loads, no click needed

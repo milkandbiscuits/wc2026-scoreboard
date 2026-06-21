@@ -718,48 +718,47 @@ function setFetchButtonsDisabled(disabled) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// Firing all 12 group requests at once trips Wikipedia's anonymous-traffic rate limiting, which then
-// fails some (or all) of them with no useful error -- silently missing whatever results were in those
-// groups. Keeping only a few requests in flight at a time, with retries and backoff on top, makes this
-// reliable instead of flaky.
-async function fetchGroupWithRetry(g, attempts = 5) {
-  const url = `https://en.wikipedia.org/w/api.php?action=parse&page=2026_FIFA_World_Cup_Group_${g}&prop=wikitext&format=json&origin=*`;
-  let lastErr;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (!data || !data.parse) throw new Error("bad response");
-      return parseGroupWikitext(data.parse.wikitext["*"]);
-    } catch (e) {
-      lastErr = e;
-      if (i < attempts - 1) await sleep(700 * (i + 1) + Math.random() * 400); // backoff with jitter before retrying
-    }
-  }
-  throw lastErr;
+// Fetching each group page separately (12 requests) trips Wikipedia's anonymous-traffic rate limiting
+// even when spread out or retried -- the limiter cares about total request count, and retrying a
+// throttled request just makes it worse. The fix is to not make 12 requests at all: the MediaWiki API
+// can return several pages' wikitext in ONE request (titles joined with "|"), so this fetches all 12
+// group pages in a single call.
+async function fetchAllGroupsWikitext() {
+  const titles = WIKI_GROUPS.map(g => `2026_FIFA_World_Cup_Group_${g}`).join("|");
+  const url = `https://en.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&format=json&origin=*&titles=${encodeURIComponent(titles)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  const pages = data && data.query && data.query.pages;
+  if (!pages) throw new Error("bad response");
+  const byGroup = {};
+  Object.values(pages).forEach(page => {
+    const m = page.title.match(/Group ([A-L])$/);
+    const rev = page.revisions && page.revisions[0];
+    const wikitext = rev && rev.slots && rev.slots.main && rev.slots.main["*"];
+    if (m && wikitext) byGroup[m[1]] = wikitext;
+  });
+  return byGroup;
 }
-
-const FETCH_CONCURRENCY = 3;
 
 async function fetchAllGroups() {
   const allResults = [];
   const failedGroups = [];
-  const queue = WIKI_GROUPS.slice();
-
-  async function worker() {
-    while (queue.length) {
-      const g = queue.shift();
-      try {
-        allResults.push(...await fetchGroupWithRetry(g));
-      } catch (e) {
-        failedGroups.push(g);
-      }
-      await sleep(300); // small gap before this worker's next request
+  let byGroup;
+  try {
+    byGroup = await fetchAllGroupsWikitext();
+  } catch (e) {
+    try {
+      await sleep(1000); // one polite retry if the single request itself hiccups
+      byGroup = await fetchAllGroupsWikitext();
+    } catch (e2) {
+      return { allResults, failedGroups: WIKI_GROUPS.slice() };
     }
   }
-
-  await Promise.all(Array.from({ length: FETCH_CONCURRENCY }, worker));
+  WIKI_GROUPS.forEach(g => {
+    if (byGroup[g]) allResults.push(...parseGroupWikitext(byGroup[g]));
+    else failedGroups.push(g);
+  });
   return { allResults, failedGroups };
 }
 

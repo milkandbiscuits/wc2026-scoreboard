@@ -335,7 +335,7 @@
       <div><span class="mw-live-lead-box" style="padding:0 7px;">±0</span> = currently leading an open matchweek (no bonus yet — fills solid green once the matchweek finishes)</div>
     </div>
     <div class="toolbar">
-      <button class="reset-btn fetch-btn js-fetch-btn">⟳ Fetch live scores</button>
+      <button class="reset-btn fetch-btn js-fetch-btn">⟳ Fetch latest results</button>
       <span class="js-fetch-status" style="color:#888;"></span>
     </div>
     <div class="toolbar">
@@ -343,8 +343,9 @@
       <span id="save-status" style="color:#888;"></span>
     </div>
     <p class="footer-note" style="padding:0 18px 14px;">
-      "Fetch live scores" pulls finished results from Wikipedia's World Cup group pages — free, no login,
-      usually updated within minutes of full-time (not second-by-second). Wikipedia is treated as the source
+      "Fetch latest results" pulls finished results from Wikipedia's World Cup group pages when you click it — free,
+      no login, no auto-refresh. Wikipedia is edited by volunteers, not a live data feed, so a result usually appears
+      within minutes of full-time rather than during the match. Wikipedia is treated as the source
       of truth: it fills in any blank fixture it has a confirmed score for, and corrects any entry — fetched
       or typed in — that doesn't match the official result. Fixtures Wikipedia hasn't confirmed yet are left untouched.
     </p>
@@ -859,7 +860,7 @@ async function fetchLiveScores() {
 
 document.querySelectorAll(".js-fetch-btn").forEach(btn => btn.addEventListener("click", fetchLiveScores));
 
-let activeTab = 0;
+let activeTab = DATA.matchweeks.length - 1; // default to the latest matchweek, not the first
 
 function renderAll() {
   renderLeaderboard();

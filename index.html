@@ -700,9 +700,16 @@ function parseGroupWikitext(wikitext) {
     const t2 = b.match(/team2=\{\{#invoke:flag\|[a-z-]+\|([A-Za-z]+)\}\}/);
     const sb = b.match(/score=(\{\{score link\|[\s\S]*?\}\})/);
     if (!t1 || !t2 || !sb) continue;
+    // Usually the score is the last "|"-segment (e.g. "...|2–0}}"), but a match with its own dedicated
+    // article links to itself with an extra trailing segment, pushing the score into the middle --
+    // so scan every segment for one that looks like a score rather than assuming its position.
     const parts = sb[1].split("|");
-    const last = parts[parts.length - 1].replace(/\}+$/, "").trim();
-    const m = last.match(/^(\d+)[‒–—-](\d+)$/); // not-yet-played shows as "Match NN", no score
+    let m = null;
+    for (const part of parts) {
+      const cleaned = part.replace(/\}+$/, "").trim();
+      m = cleaned.match(/^(\d+)[‒–—-](\d+)$/); // not-yet-played shows as "Match NN", no score
+      if (m) break;
+    }
     if (!m) continue;
     results.push({ code1: t1[1], code2: t2[1], h: Number(m[1]), a: Number(m[2]) });
   }
@@ -723,42 +730,67 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 // throttled request just makes it worse. The fix is to not make 12 requests at all: the MediaWiki API
 // can return several pages' wikitext in ONE request (titles joined with "|"), so this fetches all 12
 // group pages in a single call.
-async function fetchAllGroupsWikitext() {
-  const titles = WIKI_GROUPS.map(g => `2026_FIFA_World_Cup_Group_${g}`).join("|");
-  const url = `https://en.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&format=json&origin=*&titles=${encodeURIComponent(titles)}`;
+async function fetchWikitextByTitle(titles) {
+  const url = `https://en.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&format=json&origin=*&titles=${encodeURIComponent(titles.join("|"))}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   const pages = data && data.query && data.query.pages;
   if (!pages) throw new Error("bad response");
-  const byGroup = {};
+  const byTitle = {};
   Object.values(pages).forEach(page => {
-    const m = page.title.match(/Group ([A-L])$/);
     const rev = page.revisions && page.revisions[0];
     const wikitext = rev && rev.slots && rev.slots.main && rev.slots.main["*"];
-    if (m && wikitext) byGroup[m[1]] = wikitext;
+    if (wikitext) byTitle[page.title] = wikitext;
   });
-  return byGroup;
+  return byTitle;
+}
+
+async function fetchWithOneRetry(fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    await sleep(1000); // one polite retry if the request itself hiccups
+    return await fn();
+  }
 }
 
 async function fetchAllGroups() {
   const allResults = [];
   const failedGroups = [];
-  let byGroup;
+  // MediaWiki normalizes "_" to " " in returned page.title, so build titles with spaces here too --
+  // otherwise the lookup below (byTitle[groupTitles[i]]) silently misses every entry.
+  const groupTitles = WIKI_GROUPS.map(g => `2026 FIFA World Cup Group ${g}`);
+
+  let byTitle;
   try {
-    byGroup = await fetchAllGroupsWikitext();
+    byTitle = await fetchWithOneRetry(() => fetchWikitextByTitle(groupTitles));
   } catch (e) {
+    return { allResults, failedGroups: WIKI_GROUPS.slice() };
+  }
+
+  // A particularly notable match (a dramatic finish, a controversy) sometimes gets spun off into its
+  // own dedicated Wikipedia article, with the group page transcluding the score box from there via
+  // {{#lst:Some Article Title|SectionName}} instead of embedding it directly. That's invisible to a
+  // plain wikitext scan of the group page, so: detect those references and fetch the referenced
+  // articles too, parsing them the same way.
+  const spunOffTitles = new Set();
+  WIKI_GROUPS.forEach((g, i) => {
+    const wt = byTitle[groupTitles[i]];
+    if (!wt) { failedGroups.push(g); return; }
+    allResults.push(...parseGroupWikitext(wt));
+    for (const m of wt.matchAll(/\{\{#lst:([^|}]+)\|/g)) spunOffTitles.add(m[1].trim());
+  });
+
+  if (spunOffTitles.size) {
     try {
-      await sleep(1000); // one polite retry if the single request itself hiccups
-      byGroup = await fetchAllGroupsWikitext();
-    } catch (e2) {
-      return { allResults, failedGroups: WIKI_GROUPS.slice() };
+      const extra = await fetchWithOneRetry(() => fetchWikitextByTitle([...spunOffTitles]));
+      Object.values(extra).forEach(wt => allResults.push(...parseGroupWikitext(wt)));
+    } catch (e) {
+      // not fatal -- the main 12 groups already loaded fine, this is just one extra match's score
     }
   }
-  WIKI_GROUPS.forEach(g => {
-    if (byGroup[g]) allResults.push(...parseGroupWikitext(byGroup[g]));
-    else failedGroups.push(g);
-  });
+
   return { allResults, failedGroups };
 }
 

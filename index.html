@@ -321,6 +321,10 @@
 
   <div class="card">
     <div class="tabs" id="tabs"></div>
+    <div class="toolbar" style="border-top: none;">
+      <button class="reset-btn fetch-btn js-fetch-btn">↻ Refresh results</button>
+      <span class="js-fetch-status" style="color:#888;"></span>
+    </div>
     <div id="panels"></div>
     <div class="legend">
       <div><span class="swatch" style="background:var(--green-bg);border:1px solid var(--green)"></span>Correct result (+stake)</div>
@@ -331,8 +335,8 @@
       <div><span class="mw-live-lead-box" style="padding:0 7px;">±0</span> = currently leading an open matchweek (no bonus yet — fills solid green once the matchweek finishes)</div>
     </div>
     <div class="toolbar">
-      <button class="reset-btn fetch-btn" id="fetch-btn">⟳ Fetch live scores</button>
-      <span id="fetch-status" style="color:#888;"></span>
+      <button class="reset-btn fetch-btn js-fetch-btn">⟳ Fetch live scores</button>
+      <span class="js-fetch-status" style="color:#888;"></span>
     </div>
     <div class="toolbar">
       <button class="reset-btn" id="reset-btn">Reset all entered scores</button>
@@ -705,11 +709,16 @@ function parseGroupWikitext(wikitext) {
   return results;
 }
 
+function setFetchStatus(text) {
+  document.querySelectorAll(".js-fetch-status").forEach(el => { el.textContent = text; });
+}
+function setFetchButtonsDisabled(disabled) {
+  document.querySelectorAll(".js-fetch-btn").forEach(el => { el.disabled = disabled; });
+}
+
 async function fetchLiveScores() {
-  const btn = document.getElementById("fetch-btn");
-  const status = document.getElementById("fetch-status");
-  btn.disabled = true;
-  status.textContent = "Fetching from Wikipedia…";
+  setFetchButtonsDisabled(true);
+  setFetchStatus("Fetching from Wikipedia…");
 
   const allResults = [];
   const failedGroups = [];
@@ -764,25 +773,25 @@ async function fetchLiveScores() {
   });
 
   saveOverrides(overrides);
-  btn.disabled = false;
+  setFetchButtonsDisabled(false);
 
   if (failedGroups.length === WIKI_GROUPS.length) {
-    status.textContent = "Couldn't reach Wikipedia — check your internet connection and try again.";
+    setFetchStatus("Couldn't reach Wikipedia — check your internet connection and try again.");
   } else if (added === 0 && corrected === 0) {
-    status.textContent = failedGroups.length
+    setFetchStatus(failedGroups.length
       ? `No changes (groups ${failedGroups.join(", ")} failed to load — try again).`
-      : "No changes — everything matches the official results.";
+      : "No changes — everything matches the official results.");
   } else {
     const parts = [];
     if (added) parts.push(`added ${added} new result${added === 1 ? "" : "s"} (${addedDesc.join(", ")})`);
     if (corrected) parts.push(`corrected ${corrected} ${corrected === 1 ? "entry" : "entries"} that didn't match the official result (${correctedDesc.join(", ")})`);
-    status.textContent = parts.join("; ") + "." +
-      (failedGroups.length ? ` (Groups ${failedGroups.join(", ")} failed to load — try again to pick those up.)` : "");
+    setFetchStatus(parts.join("; ") + "." +
+      (failedGroups.length ? ` (Groups ${failedGroups.join(", ")} failed to load — try again to pick those up.)` : ""));
   }
   renderAll();
 }
 
-document.getElementById("fetch-btn").addEventListener("click", fetchLiveScores);
+document.querySelectorAll(".js-fetch-btn").forEach(btn => btn.addEventListener("click", fetchLiveScores));
 
 let activeTab = 0;
 

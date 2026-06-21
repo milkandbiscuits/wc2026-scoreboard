@@ -736,11 +736,20 @@ function renderMatchweekTable(mw, mwIndex) {
 
 // The single soonest fixture across every matchweek that doesn't have a result yet -- whatever
 // game someone's most likely about to need to update.
+// "Confirmed" means officially over -- either baked into the source data, or matched against
+// Wikipedia by the fetch. A manually typed-in score is just tinkering ("what if it ends like
+// this?") and should NOT count as the match being finished, however complete it looks.
+function isFixtureConfirmed(mwIndex, fixIndex, fixture) {
+  if (fixture.actual) return true;
+  const ov = overrides[fixtureKey(mwIndex, fixIndex)];
+  return !!(ov && ov.source === "fetch" && ov.h !== "" && ov.a !== "");
+}
+
 function findNextFixture() {
   let best = null;
   DATA.matchweeks.forEach((mw, mwIndex) => {
     mw.fixtures.forEach((fixture, fixIndex) => {
-      if (getActual(mwIndex, fixIndex, fixture)) return;
+      if (isFixtureConfirmed(mwIndex, fixIndex, fixture)) return;
       if (!best || fixture.kickoff < best.fixture.kickoff) {
         best = { mwIndex, fixIndex, fixture };
       }
@@ -754,17 +763,17 @@ let pinnedNextFixtureKey = null;
 function renderNextFixtureCard() {
   const card = document.getElementById("next-fixture-card");
 
-  // Stay pinned to whichever fixture we're already showing, even once it's been resolved --
-  // otherwise entering a score yanks it away to the next game before you get to see everyone's
-  // results, which on a phone just looks like your tap didn't register.
+  // Stay pinned to whichever fixture we're already showing -- including while someone's
+  // tinkering with a live score to see how the table would shake out -- and only move on once
+  // that match is genuinely confirmed over, not just because a score was typed into the box.
   let target = null;
   if (pinnedNextFixtureKey) {
     const [mwIndex, fixIndex] = pinnedNextFixtureKey.split("_").map(Number);
     target = { mwIndex, fixIndex, fixture: DATA.matchweeks[mwIndex].fixtures[fixIndex] };
   }
-  if (!target) {
+  if (!target || isFixtureConfirmed(target.mwIndex, target.fixIndex, target.fixture)) {
     target = findNextFixture();
-    if (target) pinnedNextFixtureKey = fixtureKey(target.mwIndex, target.fixIndex);
+    pinnedNextFixtureKey = target ? fixtureKey(target.mwIndex, target.fixIndex) : null;
   }
 
   if (!target) {
@@ -772,12 +781,7 @@ function renderNextFixtureCard() {
     return;
   }
 
-  const resolved = !!getActual(target.mwIndex, target.fixIndex, target.fixture);
   const row = renderFixtureRow(target.mwIndex, target.fixIndex, target.fixture);
-  const advanceBtn = resolved
-    ? `<button class="reset-btn" id="next-fixture-advance" style="margin:12px 18px;">Show next fixture →</button>`
-    : "";
-
   card.innerHTML = `
     <div class="card-title">Next Fixture<span class="meta">${DATA.matchweeks[target.mwIndex].name}</span></div>
     <div class="table-scroll">
@@ -791,16 +795,7 @@ function renderNextFixtureCard() {
         </thead>
         <tbody>${row}</tbody>
       </table>
-    </div>
-    ${advanceBtn}`;
-
-  const advanceBtnEl = document.getElementById("next-fixture-advance");
-  if (advanceBtnEl) {
-    advanceBtnEl.addEventListener("click", () => {
-      pinnedNextFixtureKey = null;
-      renderAll();
-    });
-  }
+    </div>`;
 }
 
 // Tournament bracket picks (Champions, Golden Boot, etc.) -- reference only, not scored here.

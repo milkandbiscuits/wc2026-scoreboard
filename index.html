@@ -148,6 +148,7 @@
     overflow: auto;
     max-height: 75vh;
     border-top: 1px solid var(--border);
+    padding-bottom: 14px;
   }
   table.games {
     border-collapse: collapse;
@@ -715,6 +716,10 @@ function renderPanels() {
   ).join("");
   const bracketPanel = `<div class="mw-panel ${activeTab === "bracket" ? "active" : ""}" data-panel="bracket">${renderBracketTable()}</div>`;
   panels.innerHTML = mwPanels + bracketPanel;
+  // Safari/WebKit can cache a stale scrollHeight for a scroll container right after its content is
+  // replaced via innerHTML, capping how far it'll let you scroll until something forces a reflow.
+  // Reading offsetHeight does that for free.
+  panels.querySelectorAll(".table-scroll").forEach(el => el.offsetHeight);
 
   // The colour legend only means anything on the scored matchweek tables, not the bracket reference table.
   document.getElementById("legend").style.display = activeTab === "bracket" ? "none" : "flex";

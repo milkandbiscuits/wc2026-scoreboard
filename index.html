@@ -750,6 +750,17 @@ const WHATIF_PHRASES = {
     `${player} keeps the pressure on, ${pts(gap)} behind the lead.`,
     `${player}'s firmly in title contention, ${pts(gap)} off top spot.`,
   ]),
+  // The biggest rank reshuffle happening out of the spotlight, in the pack between the title race
+  // and the bottom -- so a render doesn't only ever talk about whoever's at the very top or
+  // bottom of the table.
+  midTableMover: (player, fromRank, toRank) => {
+    const up = toRank < fromRank;
+    return pick([
+      `${player} ${up ? "climbs" : "slides"} from #${fromRank} to #${toRank} in the chasing pack.`,
+      `${player} ${up ? "moves up" : "drops"} from #${fromRank} to #${toRank} mid-table.`,
+      `${player} ${up ? "rises" : "falls"} from #${fromRank} to #${toRank} in the scrum behind the leaders.`,
+    ]);
+  },
   // Eyes-emoji flags the *sustained* streak specifically (vs. bottomPlain below, which is for a
   // fresh arrival at the bottom and doesn't get one).
   bottomStreak: (player, gap, above) => pick([
@@ -888,6 +899,27 @@ function buildWhatIfText(target) {
     mentioned.add(contender.player);
     sentences.push(WHATIF_PHRASES.contention(contender.player, contender.gap) + exactBonusSuffix(contender.player));
   }
+
+  // Biggest rank reshuffle happening in mid-table (ranks 7 to n-3 -- excludes the bottom-3 zone,
+  // which gets its own dedicated treatment below) -- so the blurb isn't always exclusively about
+  // whoever's fighting for the top spot or stuck at the bottom.
+  const midTablePool = hypoRank
+    .filter(r => !mentioned.has(r.player) && r.rank >= 7 && r.rank <= n - 3)
+    .map(r => ({ player: r.player, hypoRank: r.rank, baseRank: baseRankByPlayer[r.player] }))
+    .filter(m => m.baseRank !== m.hypoRank)
+    .sort((a, b) => Math.abs(b.baseRank - b.hypoRank) - Math.abs(a.baseRank - a.hypoRank));
+  const midTableMovers = midTablePool.slice(0, 1);
+  // "🤖" is a joke entrant, not an actual person reading this -- if it's the only mid-table
+  // mover found, also pull in the next-best human/real-entrant mover so a real player still gets
+  // the mid-table spotlight too, not just the bot.
+  if (midTableMovers[0] && midTableMovers[0].player === "🤖") {
+    const humanMover = midTablePool.find(m => m.player !== "🤖");
+    if (humanMover) midTableMovers.push(humanMover);
+  }
+  midTableMovers.forEach(m => {
+    mentioned.add(m.player);
+    sentences.push(WHATIF_PHRASES.midTableMover(m.player, m.baseRank, m.hypoRank) + exactBonusSuffix(m.player));
+  });
 
   // Bottom of the table: always mentioned, "propping up the league" only once they've genuinely
   // been stuck there for a sustained run (not just one bad result), plus the points gap to catch
@@ -1151,6 +1183,11 @@ function renderNextFixtureCard() {
     return;
   }
 
+  // Computed once and shared with the compact banner below -- buildWhatIfText() picks its
+  // phrasing at random, so calling it separately for each view used to produce two different
+  // (factually identical, differently-worded) blurbs depending on orientation. Sharing one result
+  // keeps portrait and landscape showing the exact same wording for the exact same render.
+  const guidance = fixtureGuidanceHtml(target);
   const row = renderFixtureRow(target.mwIndex, target.fixIndex, target.fixture);
   card.innerHTML = `
     <div class="card-title">${fixtureTitleLabel(target)}<span class="meta">${DATA.matchweeks[target.mwIndex].name}</span></div>
@@ -1166,8 +1203,8 @@ function renderNextFixtureCard() {
         <tbody>${row}</tbody>
       </table>
     </div>
-    ${fixtureGuidanceHtml(target)}`;
-  renderCompactFixtureBanner(target);
+    ${guidance}`;
+  renderCompactFixtureBanner(target, guidance);
 }
 
 // Mutually exclusive: shows the "what if this holds?" blurb once a tentative score is entered,
@@ -1183,7 +1220,9 @@ function fixtureGuidanceHtml(target) {
 // Portrait-mobile-only condensed stand-in for the Next Fixture card above -- same target fixture,
 // but skips all 17 players' predictions (that's what makes the full table too wide for a narrow
 // screen) so there's still a quick way to enter the live score without rotating the phone.
-function renderCompactFixtureBanner(target) {
+// guidance is passed in from renderNextFixtureCard() (already computed there) rather than
+// recomputed here, so both views always show identical wording, not just identical facts.
+function renderCompactFixtureBanner(target, guidance) {
   const el = document.getElementById("compact-fixture-banner");
   if (!target) {
     el.innerHTML = "";
@@ -1200,7 +1239,7 @@ function renderCompactFixtureBanner(target) {
       <div class="compact-fixture-name">${fixture.home} <span style="color:#aaa;">v</span> ${fixture.away}<div class="kickoff-time">${formatKickoff(fixture.kickoff)}</div></div>
       ${renderActualCell(mwIndex, fixIndex, hVal, aVal)}
     </div>
-    ${fixtureGuidanceHtml(target)}`;
+    ${guidance}`;
 }
 
 // Tournament bracket picks (Champions, Golden Boot, etc.) -- reference only, not scored here.

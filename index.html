@@ -337,6 +337,15 @@
     font-size: 12px;
     color: #777;
   }
+  .whatif-note {
+    margin: 0;
+    padding: 10px 18px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--accent);
+    background: #eef3fc;
+    border-top: 1px solid var(--border);
+  }
   .header-top { display: flex; align-items: center; gap: 16px; }
   .header-top img.gwil-mug {
     height: 76px;
@@ -558,7 +567,14 @@ function pickMatchweekLeaders(totals, mwIndex) {
   return candidates;
 }
 
-function computeTotals() {
+// excludeKey: optional "mwIndex_fixIndex" to treat as still-pending regardless of its actual/
+// override value -- lets the "what if" blurb compute a before-this-result baseline by excluding
+// just the one fixture being tinkered with, leaving every other result (confirmed or otherwise
+// tentatively typed-in) exactly as-is.
+// onlyKeys: optional Set of "mwIndex_fixIndex" -- when given, ONLY those fixtures are treated as
+// resolved (everything else pending), regardless of their real-world status. Used to replay the
+// tournament chronologically one fixture at a time for the bottom-of-table streak calculation.
+function computeTotals(excludeKey, onlyKeys) {
   const totals = {};
   DATA.players.forEach(p => totals[p] = {
     byMw: {}, baseByMw: {}, exactByMw: {}, bonusMw: {}, liveLeadMw: {},
@@ -573,7 +589,9 @@ function computeTotals() {
     });
     let anyResolved = false, allResolved = true;
     mw.fixtures.forEach((fixture, fixIndex) => {
-      const actual = getActual(mwIndex, fixIndex, fixture);
+      const k = fixtureKey(mwIndex, fixIndex);
+      const allowed = !onlyKeys || onlyKeys.has(k);
+      const actual = (k === excludeKey || !allowed) ? null : getActual(mwIndex, fixIndex, fixture);
       if (actual) anyResolved = true; else allResolved = false;
       DATA.players.forEach(p => {
         const pred = fixture.predictions[p];
@@ -608,6 +626,288 @@ function computeTotals() {
   });
 
   return totals;
+}
+
+// Ranks every player 1..N using the exact same ordering the leaderboard table uses (total desc,
+// then name as a deterministic tie-break), so there's never an ambiguous "tied for 5th" here.
+function rankPlayers(totals) {
+  return DATA.players
+    .map(p => ({ player: p, total: totals[p].total }))
+    .sort((a, b) => b.total - a.total || a.player.localeCompare(b.player))
+    .map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+// Every fixture across every matchweek, flattened and sorted by true kickoff order -- ignores
+// matchweek boundaries, since a bottom-of-the-table streak can span across them.
+function allFixturesChronological() {
+  const list = [];
+  DATA.matchweeks.forEach((mw, mwIndex) => {
+    mw.fixtures.forEach((fixture, fixIndex) => {
+      list.push({ mwIndex, fixIndex, fixture, key: fixtureKey(mwIndex, fixIndex), kickoff: fixture.kickoff });
+    });
+  });
+  list.sort((a, b) => a.kickoff < b.kickoff ? -1 : a.kickoff > b.kickoff ? 1 : 0);
+  return list;
+}
+
+// How many consecutive resolved fixtures, in true chronological order, has the CURRENT bottom
+// player been sat last? Replays the tournament one fixture at a time -- snapshotting who's bottom
+// after each one becomes resolved -- and counts the trailing run ending at "now" (which includes
+// the pinned target's hypothetical score, if it's the next one due). A single bad result doesn't
+// earn the "propping up the league" treatment; only a genuine sustained run does.
+function computeBottomStreak(target) {
+  const chronological = allFixturesChronological();
+  const resolvedSoFar = new Set();
+  let lastBottom = null, streak = 0;
+  chronological.forEach(f => {
+    const isHypo = !!target && f.mwIndex === target.mwIndex && f.fixIndex === target.fixIndex;
+    if (!isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture) && !isHypo) return;
+    resolvedSoFar.add(f.key);
+    const bottom = rankPlayers(computeTotals(undefined, resolvedSoFar)).slice(-1)[0].player;
+    if (bottom === lastBottom) streak++;
+    else { lastBottom = bottom; streak = 1; }
+  });
+  return { player: lastBottom, streak };
+}
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function pts(n) { return `${n} point${n === 1 ? "" : "s"}`; }
+// Every player is an individual man except "Fred + Teilo" (a joint two-person entry) and "🤖"
+// (the AI Robot joke entrant, not a person) -- those two get "they/their", everyone else "he/his".
+function pronounFor(player) {
+  if (player === "Fred + Teilo" || player === "🤖") return { Subj: "They", subj: "they", poss: "their" };
+  return { Subj: "He", subj: "he", poss: "his" };
+}
+
+// A pool of equivalent phrasings per situation so the blurb doesn't read identically every time
+// someone tinkers with a score. "Crown"/"champion" language is deliberately reserved for an
+// actual final league win, never used for a temporary mid-tournament #1 -- per explicit feedback,
+// since the tournament isn't over and nobody's actually won anything yet.
+const WHATIF_PHRASES = {
+  holds: (margin) => pick([
+    `Gwil holds onto top spot by ${pts(margin)}. 💪`,
+    `Gwil stays top of the leaderboard, ${pts(margin)} clear. 💪`,
+    `Gwil's still the one to beat, ${pts(margin)} up. 💪`,
+  ]),
+  seizes: (margin) => pick([
+    `Gwil grabs top spot by ${pts(margin)}. 💪`,
+    `Gwil leapfrogs the field to sit top of the leaderboard by ${pts(margin)}. 💪`,
+    `Gwil muscles into top spot, ${pts(margin)} clear. 💪`,
+  ]),
+  sitsUnchanged: (rank, leader) => pick([
+    `Gwil sits at #${rank}, with ${leader} out front.`,
+    `Gwil holds at #${rank}, trailing ${leader}.`,
+    `Gwil's stuck at #${rank}, behind ${leader}.`,
+  ]),
+  slips: (from, to, leader) => pick([
+    `Gwil slips from #${from} to #${to}, with ${leader} now top of the leaderboard.`,
+    `Gwil tumbles to #${to}, as ${leader} moves top.`,
+    `Gwil's grip loosens, dropping to #${to} behind ${leader}.`,
+  ]),
+  climbsWithinTop3: (from, to) => pick([
+    `Gwil climbs from #${from} to #${to}.`,
+    `Gwil moves up to #${to}.`,
+    `Gwil edges up from #${from} to #${to}.`,
+  ]),
+  knockedOut: (from, to) => pick([
+    `Gwil's knocked clean out of the top 3, tumbling from #${from} to #${to}.`,
+    `Gwil crashes out of the podium, down to #${to}.`,
+    `Gwil's grip on the top spots slips badly, down from #${from} to #${to}.`,
+  ]),
+  midPack: (rank, gap, leader) => pick([
+    `Gwil sits at #${rank}, ${pts(gap)} off top spot.`,
+    `Gwil's down at #${rank} for now, ${pts(gap)} behind ${leader}.`,
+    `Gwil's a way off the pace at #${rank}, ${pts(gap)} adrift of the lead.`,
+  ]),
+  // One distinct celebration emoji per phrasing (not random per render -- whichever template
+  // pick() lands on always carries the same one), so there's still variety without going overboard.
+  exact: (player, doubledPts, pronoun) => pick([
+    `${player} nails the exact score, doubling ${pronoun.poss} stake to +${doubledPts}! 👏`,
+    `${player} called it exactly, +${doubledPts} doubled! 🔥`,
+    `${player}'s exact score lands, +${doubledPts}! 🥳`,
+  ]),
+  // Same fact, but for tacking onto a sentence that already names the player -- no need to name
+  // them again right after their own sentence. Pronoun comes from pronounFor(player): "he" for
+  // every individually-named player, "they" only for the two non-individual entries ("Fred +
+  // Teilo" is a joint two-person entry, "🤖" is the AI Robot joke entrant).
+  exactAppend: (doubledPts, pronoun) => pick([
+    `And ${pronoun.subj} called the exact score too, doubling to +${doubledPts}! 👏`,
+    `${pronoun.Subj} also nailed the exact score, +${doubledPts} doubled! 🔥`,
+    `On top of that, ${pronoun.subj} called it exactly for +${doubledPts}! 🥳`,
+  ]),
+  // A losing swing gets a wince; a heavy one (>15pts lost) gets the full hide-your-eyes treatment.
+  // Gains don't get an emoji here -- the exact-score pool above already covers the celebrations.
+  swing: (player, swing) => {
+    const emoji = swing >= 0 ? "" : swing <= -15 ? " 🙈" : " 😬";
+    return pick([
+      `${player}'s total swings by ${swing > 0 ? "+" : ""}${swing} on this result.${emoji}`,
+      `${player} stands to ${swing > 0 ? "gain" : "lose"} ${pts(Math.abs(swing))} here.${emoji}`,
+      `${player}'s in for a ${swing > 0 ? "big boost" : "big hit"} ${swing > 0 ? "+" : ""}${swing} points swing.${emoji}`,
+    ]);
+  },
+  contention: (player, gap) => pick([
+    `${player}'s right in the mix, just ${pts(gap)} off top spot.`,
+    `${player} keeps the pressure on, ${pts(gap)} behind the lead.`,
+    `${player}'s firmly in title contention, ${pts(gap)} off top spot.`,
+  ]),
+  // Eyes-emoji flags the *sustained* streak specifically (vs. bottomPlain below, which is for a
+  // fresh arrival at the bottom and doesn't get one).
+  bottomStreak: (player, gap, above) => pick([
+    `${player} continues to prop up the league, needing ${pts(gap)} to catch ${above}. 👀`,
+    `${player}'s still rooted to the bottom, ${pts(gap)} off ${above}. 👀`,
+    `${player} remains anchored last, ${pts(gap)} shy of ${above}. 👀`,
+  ]),
+  bottomPlain: (player, gap, above) => pick([
+    `${player} is currently bottom of the league, ${pts(gap)} off ${above}.`,
+    `${player} sits last, ${pts(gap)} shy of ${above}.`,
+    `${player} props up the table for now, ${pts(gap)} off ${above}.`,
+  ]),
+  nearBottom: (player, gap) => pick([
+    `${player} isn't safe either, just ${pts(gap)} clear of the bottom.`,
+    `${player} is only ${pts(gap)} above the bottom.`,
+    `${player}'s within ${pts(gap)} of taking over as bottom.`,
+  ]),
+};
+const NEAR_BOTTOM_THRESHOLD = 20; // roughly one confident pick's worth of swing (stakes up to 24, doubled on an exact score)
+
+// "What if this result stands" blurb for the pinned next/live fixture, framed around the pool's
+// running joke that it's really about trying to beat Gwil at his own game: compares the
+// leaderboard with the typed-in score applied against a baseline where that one result is still
+// pending. Gwil ALWAYS gets a line, wherever he ends up -- top 3 gets the full holds/seizes/slips
+// treatment, anywhere else still gets a "how far off the lead" mention, so he never goes quiet
+// just because he's stuck in mid-table. Below that, the focus is on the title race and the
+// biggest swings: anyone who nailed the exact score for this fixture (double points) gets first
+// billing, then whoever's total points swung the most, then whoever's closest to challenging the
+// leader. Always closes with whoever's bottom of the table -- "propping up the league" only once
+// they've genuinely been stuck there for a sustained run, plus whoever's closest to joining them.
+function buildWhatIfText(target) {
+  if (!target) return "";
+  const { mwIndex, fixIndex, fixture } = target;
+  const key = fixtureKey(mwIndex, fixIndex);
+  const ov = overrides[key];
+  const hasTentativeValue = !!ov && ov.h !== "" && ov.a !== "" && ov.h !== undefined && ov.a !== undefined;
+  if (!hasTentativeValue || isFixtureConfirmed(mwIndex, fixIndex, fixture)) return "";
+
+  const hypoTotals = computeTotals();
+  const baseTotals = computeTotals(key);
+  const hypoRank = rankPlayers(hypoTotals);
+  const baseRank = rankPlayers(baseTotals);
+  const n = DATA.players.length;
+
+  const baseRankByPlayer = {}, playerAtHypoRank = {};
+  const hypoRankByPlayer = {};
+  hypoRank.forEach(r => { hypoRankByPlayer[r.player] = r.rank; playerAtHypoRank[r.rank] = r.player; });
+  baseRank.forEach(r => { baseRankByPlayer[r.player] = r.rank; });
+
+  const sentences = [];
+  const mentioned = new Set(["Gwil"]); // anyone already named, so later lines never repeat them
+  const gwilHypoRank = hypoRankByPlayer["Gwil"];
+  const gwilBaseRank = baseRankByPlayer["Gwil"];
+
+  // Anyone who personally nailed the exact score for THIS fixture is worth a shout-out -- double
+  // points is the single most dramatic thing that can happen on one result. Rather than risk a
+  // separate sentence repeating someone already named elsewhere (the bottom player very often
+  // also has the biggest swing, say), the bonus gets folded into whichever sentence already has
+  // them as its subject -- exactBonusSuffix(p) is called once per slot below as each is built.
+  const tentativeActual = { h: Number(ov.h), a: Number(ov.a) };
+  const isExact = (p) => { const pr = fixture.predictions[p]; return pr.h === tentativeActual.h && pr.a === tentativeActual.a; };
+  const exactCredited = new Set();
+  const exactBonusSuffix = (p) => {
+    if (exactCredited.has(p) || !isExact(p)) return "";
+    exactCredited.add(p);
+    const doubledPts = fixture.predictions[p].stake * 2;
+    return " " + WHATIF_PHRASES.exactAppend(doubledPts, pronounFor(p));
+  };
+
+  let gwilSentence;
+  if (gwilHypoRank === 1) {
+    const runnerUp = playerAtHypoRank[2];
+    const margin = hypoTotals["Gwil"].total - hypoTotals[runnerUp].total;
+    gwilSentence = gwilBaseRank === 1 ? WHATIF_PHRASES.holds(margin) : WHATIF_PHRASES.seizes(margin);
+    mentioned.add(runnerUp);
+  } else if (gwilHypoRank <= 3) {
+    const leader = playerAtHypoRank[1];
+    if (gwilBaseRank === gwilHypoRank) {
+      gwilSentence = WHATIF_PHRASES.sitsUnchanged(gwilHypoRank, leader);
+      mentioned.add(leader);
+    } else if (gwilBaseRank < gwilHypoRank) {
+      gwilSentence = WHATIF_PHRASES.slips(gwilBaseRank, gwilHypoRank, leader);
+      mentioned.add(leader);
+    } else {
+      gwilSentence = WHATIF_PHRASES.climbsWithinTop3(gwilBaseRank, gwilHypoRank);
+    }
+  } else if (gwilBaseRank <= 3) {
+    gwilSentence = WHATIF_PHRASES.knockedOut(gwilBaseRank, gwilHypoRank);
+  } else {
+    // Never close to the top 3 either way -- still always worth a line, framed by how far off
+    // the lead he is, so he doesn't go quiet just for being stuck in mid-table.
+    const leader = playerAtHypoRank[1];
+    const gapToLead = hypoTotals[leader].total - hypoTotals["Gwil"].total;
+    gwilSentence = WHATIF_PHRASES.midPack(gwilHypoRank, gapToLead, leader);
+  }
+  sentences.push(gwilSentence + exactBonusSuffix("Gwil"));
+
+  // Reserve the bottom-zone players (covered in depth below) before picking exact-shoutouts,
+  // swing, or contention -- otherwise any of those could end up naming the same person the
+  // bottom-of-the-table section is about to name again for an unrelated reason.
+  const bottomHypo = playerAtHypoRank[n];
+  const aboveBottom = playerAtHypoRank[n - 1];
+  const secondFromBottom = n >= 3 ? playerAtHypoRank[n - 2] : null;
+  [bottomHypo, aboveBottom, secondFromBottom].forEach(p => { if (p) mentioned.add(p); });
+
+  const exactShoutouts = DATA.players
+    .filter(p => !mentioned.has(p) && isExact(p))
+    .sort((a, b) => fixture.predictions[b].stake - fixture.predictions[a].stake)
+    .slice(0, 2);
+  exactShoutouts.forEach(p => {
+    mentioned.add(p);
+    sentences.push(WHATIF_PHRASES.exact(p, fixture.predictions[p].stake * 2, pronounFor(p)));
+    exactCredited.add(p);
+  });
+
+  // Biggest points swing on this one result (not just a rank change -- a crowded mid-table can
+  // have a huge points swing with barely any rank movement to show for it).
+  const swingPool = DATA.players
+    .filter(p => !mentioned.has(p))
+    .map(p => ({ player: p, swing: hypoTotals[p].total - baseTotals[p].total }))
+    .filter(m => m.swing !== 0);
+  const biggestSwing = swingPool.sort((a, b) => Math.abs(b.swing) - Math.abs(a.swing))[0];
+  if (biggestSwing) {
+    mentioned.add(biggestSwing.player);
+    sentences.push(WHATIF_PHRASES.swing(biggestSwing.player, biggestSwing.swing) + exactBonusSuffix(biggestSwing.player));
+  }
+
+  // Whoever's closest to challenging the leader for top spot -- the actual title race, not just
+  // whoever moved the most ranks.
+  const leaderPlayer = playerAtHypoRank[1];
+  const contender = DATA.players
+    .filter(p => !mentioned.has(p) && p !== leaderPlayer)
+    .map(p => ({ player: p, gap: hypoTotals[leaderPlayer].total - hypoTotals[p].total }))
+    .sort((a, b) => a.gap - b.gap)[0];
+  if (contender) {
+    mentioned.add(contender.player);
+    sentences.push(WHATIF_PHRASES.contention(contender.player, contender.gap) + exactBonusSuffix(contender.player));
+  }
+
+  // Bottom of the table: always mentioned, "propping up the league" only once they've genuinely
+  // been stuck there for a sustained run (not just one bad result), plus the points gap to catch
+  // whoever's directly above them.
+  const gapToAbove = hypoTotals[aboveBottom].total - hypoTotals[bottomHypo].total;
+  const { streak } = computeBottomStreak(target);
+  sentences.push((streak > 3
+    ? WHATIF_PHRASES.bottomStreak(bottomHypo, gapToAbove, aboveBottom)
+    : WHATIF_PHRASES.bottomPlain(bottomHypo, gapToAbove, aboveBottom)) + exactBonusSuffix(bottomHypo));
+
+  // Whoever's 2nd-from-bottom isn't otherwise mentioned above -- if they're within touching
+  // distance of taking over as bottom themselves, call that out too.
+  if (secondFromBottom) {
+    const gapSecond = hypoTotals[secondFromBottom].total - hypoTotals[bottomHypo].total;
+    if (gapSecond <= NEAR_BOTTOM_THRESHOLD) {
+      sentences.push(WHATIF_PHRASES.nearBottom(secondFromBottom, gapSecond) + exactBonusSuffix(secondFromBottom));
+    }
+  }
+
+  return `What if this holds? ${sentences.join(" ")}`;
 }
 
 function getGwilMugSrc() {
@@ -854,8 +1154,16 @@ function renderNextFixtureCard() {
         </thead>
         <tbody>${row}</tbody>
       </table>
-    </div>`;
+    </div>
+    ${whatIfHtml(target)}`;
   renderCompactFixtureBanner(target);
+}
+
+// Wraps buildWhatIfText() as a <p>, or "" if there's nothing hypothetical to show yet -- shared
+// by both the full Next Fixture card and the compact portrait banner so they stay in sync.
+function whatIfHtml(target) {
+  const text = buildWhatIfText(target);
+  return text ? `<p class="whatif-note">${text}</p>` : "";
 }
 
 // Portrait-mobile-only condensed stand-in for the Next Fixture card above -- same target fixture,
@@ -878,6 +1186,7 @@ function renderCompactFixtureBanner(target) {
       <div class="compact-fixture-name">${fixture.home} <span style="color:#aaa;">v</span> ${fixture.away}<div class="kickoff-time">${formatKickoff(fixture.kickoff)}</div></div>
       ${renderActualCell(mwIndex, fixIndex, hVal, aVal)}
     </div>
+    ${whatIfHtml(target)}
     <p class="compact-fixture-note">Enter live score here to update leaderboard</p>`;
 }
 

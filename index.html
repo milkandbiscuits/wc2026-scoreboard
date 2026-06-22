@@ -1118,6 +1118,17 @@ function findNextFixture() {
 
 let pinnedNextFixtureKey = null;
 
+// "LIVE Fixture" once kickoff has passed and the result isn't confirmed yet (still officially
+// undecided), "Next Fixture" beforehand. Deliberately never reverts on its own once live -- if
+// Wikipedia is slow to confirm a result, staying "LIVE" a bit too long is a much safer failure
+// mode than flipping back to "Next" while the match might still be going.
+function fixtureTitleLabel(target) {
+  if (!target) return "Next Fixture";
+  const kickedOff = Date.now() >= new Date(target.fixture.kickoff).getTime();
+  const inPlay = kickedOff && !isFixtureConfirmed(target.mwIndex, target.fixIndex, target.fixture);
+  return inPlay ? "LIVE Fixture" : "Next Fixture";
+}
+
 function renderNextFixtureCard() {
   const card = document.getElementById("next-fixture-card");
 
@@ -1142,7 +1153,7 @@ function renderNextFixtureCard() {
 
   const row = renderFixtureRow(target.mwIndex, target.fixIndex, target.fixture);
   card.innerHTML = `
-    <div class="card-title">Next Fixture<span class="meta">${DATA.matchweeks[target.mwIndex].name}</span></div>
+    <div class="card-title">${fixtureTitleLabel(target)}<span class="meta">${DATA.matchweeks[target.mwIndex].name}</span></div>
     <div class="table-scroll">
       <table class="games">
         <thead>
@@ -1184,7 +1195,7 @@ function renderCompactFixtureBanner(target) {
   const hVal = ov.h !== undefined ? ov.h : (fixture.actual ? fixture.actual.h : "");
   const aVal = ov.a !== undefined ? ov.a : (fixture.actual ? fixture.actual.a : "");
   el.innerHTML = `
-    <div class="card-title">Next Fixture<span class="meta">${DATA.matchweeks[mwIndex].name}</span></div>
+    <div class="card-title">${fixtureTitleLabel(target)}<span class="meta">${DATA.matchweeks[mwIndex].name}</span></div>
     <div class="compact-fixture-row">
       <div class="compact-fixture-name">${fixture.home} <span style="color:#aaa;">v</span> ${fixture.away}<div class="kickoff-time">${formatKickoff(fixture.kickoff)}</div></div>
       ${renderActualCell(mwIndex, fixIndex, hVal, aVal)}
@@ -1538,6 +1549,22 @@ document.getElementById("rotate-mug").src = getGwilMugSrc();
 
 renderAll();
 fetchLiveScores(); // auto-check Wikipedia for the latest results as soon as the page loads, no click needed
+
+// Flips "Next Fixture" -> "LIVE Fixture" the moment kickoff passes. Deliberately only touches the
+// title's text node, not a full re-render -- renderAll() rebuilds the whole panels/table markup,
+// which would steal focus from someone mid-typing a score, exactly what onScoreInput's "don't
+// re-render on every keystroke" guard exists to avoid elsewhere. This has to stay just as careful
+// even though it's timer-driven rather than input-driven.
+function refreshFixtureTitleLabel() {
+  if (!pinnedNextFixtureKey) return;
+  const [mwIndex, fixIndex] = pinnedNextFixtureKey.split("_").map(Number);
+  const target = { mwIndex, fixIndex, fixture: DATA.matchweeks[mwIndex].fixtures[fixIndex] };
+  const label = fixtureTitleLabel(target);
+  document.querySelectorAll("#next-fixture-card .card-title, #compact-fixture-banner .card-title").forEach(el => {
+    if (el.firstChild && el.firstChild.nodeType === Node.TEXT_NODE) el.firstChild.textContent = label;
+  });
+}
+setInterval(refreshFixtureTitleLabel, 30000);
 </script>
 
 </body>

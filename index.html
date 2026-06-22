@@ -331,7 +331,7 @@
     padding: 14px 18px;
   }
   .compact-fixture-name { font-weight: 600; font-size: 14px; }
-  .compact-fixture-note {
+  .fixture-note {
     margin: 0;
     padding: 0 18px 14px;
     font-size: 12px;
@@ -1155,15 +1155,18 @@ function renderNextFixtureCard() {
         <tbody>${row}</tbody>
       </table>
     </div>
-    ${whatIfHtml(target)}`;
+    ${fixtureGuidanceHtml(target)}`;
   renderCompactFixtureBanner(target);
 }
 
-// Wraps buildWhatIfText() as a <p>, or "" if there's nothing hypothetical to show yet -- shared
-// by both the full Next Fixture card and the compact portrait banner so they stay in sync.
-function whatIfHtml(target) {
+// Mutually exclusive: shows the "what if this holds?" blurb once a tentative score is entered,
+// otherwise a plain instructional note telling people how to enter one. Only ever one or the
+// other -- once there's something to say about the score, the "how to" hint isn't needed anymore.
+// Shared by both the full Next Fixture card and the compact portrait banner so they stay in sync.
+function fixtureGuidanceHtml(target) {
   const text = buildWhatIfText(target);
-  return text ? `<p class="whatif-note">${text}</p>` : "";
+  if (text) return `<p class="whatif-note">${text}</p>`;
+  return `<p class="fixture-note">Enter live score here to update leaderboard</p>`;
 }
 
 // Portrait-mobile-only condensed stand-in for the Next Fixture card above -- same target fixture,
@@ -1186,8 +1189,7 @@ function renderCompactFixtureBanner(target) {
       <div class="compact-fixture-name">${fixture.home} <span style="color:#aaa;">v</span> ${fixture.away}<div class="kickoff-time">${formatKickoff(fixture.kickoff)}</div></div>
       ${renderActualCell(mwIndex, fixIndex, hVal, aVal)}
     </div>
-    ${whatIfHtml(target)}
-    <p class="compact-fixture-note">Enter live score here to update leaderboard</p>`;
+    ${fixtureGuidanceHtml(target)}`;
 }
 
 // Tournament bracket picks (Champions, Golden Boot, etc.) -- reference only, not scored here.

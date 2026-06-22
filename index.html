@@ -300,6 +300,17 @@
   }
   .actual-badge:hover { background: #e2e7f0; }
   .actual-badge .edit-pencil { font-size: 10px; opacity: 0.6; }
+  .clear-fixture-btn {
+    border: none;
+    background: transparent;
+    color: #999;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  .clear-fixture-btn:hover { color: var(--red); background: var(--red-bg); }
   .header-top { display: flex; align-items: center; gap: 16px; }
   .header-top img.gwil-mug {
     height: 76px;
@@ -355,6 +366,13 @@
   @media (max-width: 700px) and (orientation: portrait) {
     .rotate-banner { display: flex; }
     .next-fixture-card { display: none; }
+  }
+  /* iOS/Android auto-zoom the whole page on focus for any text input under 16px font-size --
+     bump it just for touch devices so entering a score doesn't yank the viewport in. Scoped to
+     pointer:coarse (not a width breakpoint) because phones in landscape are often wider than
+     any sensible breakpoint but still trigger the zoom. */
+  @media (pointer: coarse) {
+    .score-input { font-size: 16px; width: 34px; padding: 4px 2px; }
   }
 </style>
 </head>
@@ -663,16 +681,25 @@ function renderActualCell(mwIndex, fixIndex, hVal, aVal) {
   const key = fixtureKey(mwIndex, fixIndex);
   const hasValue = hVal !== "" && aVal !== "";
   const locked = hasValue && !unlockedKeys.has(key);
+  // Only safe to offer a one-click wipe while the fixture is still "open" -- once Wikipedia (or
+  // baked-in data) has confirmed it there's a real result that clearing could lose.
+  const fixture = DATA.matchweeks[mwIndex].fixtures[fixIndex];
+  const showClear = hasValue && !isFixtureConfirmed(mwIndex, fixIndex, fixture);
+  const clearBtn = showClear
+    ? `<button class="clear-fixture-btn" data-key="${key}" title="Clear this score">×</button>`
+    : "";
 
   if (locked) {
     return `<div class="actual-wrap" data-actual-wrap="${key}">
       <span class="actual-badge" data-key="${key}" tabindex="0" title="Click to correct this result">${hVal}-${aVal} <span class="edit-pencil">✎</span></span>
+      ${clearBtn}
     </div>`;
   }
   return `<div class="actual-wrap" data-actual-wrap="${key}">
     <input type="number" min="0" max="20" class="score-input" data-mw="${mwIndex}" data-fix="${fixIndex}" data-side="h" value="${hVal}">
     <span class="score-sep">-</span>
     <input type="number" min="0" max="20" class="score-input" data-mw="${mwIndex}" data-fix="${fixIndex}" data-side="a" value="${aVal}">
+    ${clearBtn}
   </div>`;
 }
 
@@ -873,6 +900,15 @@ function attachInputListeners() {
   document.querySelectorAll(".actual-badge").forEach(badge => {
     badge.addEventListener("click", () => {
       unlockedKeys.add(badge.dataset.key);
+      renderAll();
+    });
+  });
+  document.querySelectorAll(".clear-fixture-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.key;
+      delete overrides[key];
+      unlockedKeys.delete(key);
+      saveOverrides(overrides);
       renderAll();
     });
   });
@@ -1084,10 +1120,38 @@ document.querySelectorAll(".js-fetch-btn").forEach(btn => btn.addEventListener("
 
 let activeTab = DATA.matchweeks.length - 1; // default to the latest matchweek, not the first
 
+// renderPanels() rebuilds every .table-scroll container from scratch via innerHTML, which would
+// otherwise reset scroll position to 0 on every blur-triggered re-render. Deliberately scoped to
+// only the *currently active* panel (not all of them) -- hidden (display:none) panels have
+// unreliable scrollTop semantics in some browsers.
+function captureScrollState() {
+  const state = { windowScrollY: window.scrollY, scrolls: {} };
+  const nextFix = document.querySelector("#next-fixture-card .table-scroll");
+  if (nextFix) state.scrolls.nextFixture = { top: nextFix.scrollTop, left: nextFix.scrollLeft };
+  const active = document.querySelector(".mw-panel.active .table-scroll");
+  if (active) state.scrolls.active = { top: active.scrollTop, left: active.scrollLeft };
+  return state;
+}
+function restoreScrollState(state) {
+  const nextFix = document.querySelector("#next-fixture-card .table-scroll");
+  if (nextFix && state.scrolls.nextFixture) {
+    nextFix.scrollTop = state.scrolls.nextFixture.top;
+    nextFix.scrollLeft = state.scrolls.nextFixture.left;
+  }
+  const active = document.querySelector(".mw-panel.active .table-scroll");
+  if (active && state.scrolls.active) {
+    active.scrollTop = state.scrolls.active.top;
+    active.scrollLeft = state.scrolls.active.left;
+  }
+  window.scrollTo(window.scrollX, state.windowScrollY);
+}
+
 function renderAll() {
+  const s = captureScrollState();
   renderLeaderboard();
   renderNextFixtureCard();
   renderPanels();
+  restoreScrollState(s);
 }
 
 document.getElementById("reset-btn").addEventListener("click", () => {

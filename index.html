@@ -247,6 +247,13 @@
     border: 2px solid #555;
   }
   .bonus-info-box { cursor: help; border-bottom: 1px dotted currentColor; }
+  .rules-section-row td {
+    background: var(--header-bg);
+    font-weight: 700;
+    padding: 6px 12px;
+    border-top: 2px solid var(--border);
+    border-bottom: 2px solid var(--border);
+  }
 
   .score-input {
     width: 28px;
@@ -953,12 +960,22 @@ function computeBonusDeductionPoints(player) {
   add("missedPenalty", "Golden Boot pick misses an in-play penalty (no data source yet)", "pending", 0); // Phase 2 stub
 
   // Trump high-five -- the one deliberate manual exception (see tournamentFacts.trumpCulprit); no
-  // structured data source can ever confirm this, so it only fires if Gwil types in a name.
-  if (tournamentFacts.trumpCulprit) {
-    const culprit = tournamentFacts.trumpCulprit;
-    const hits = ["Golden Boot", "Golden Glove", "Best Young Player"]
-      .some(cat => namesMatch(pickFor(cat, player), culprit));
-    if (hits) add("trumpHighFive", `${culprit} high-fived Donald Trump`, "hit", BONUS_RULE_POINTS.trumpHighFive);
+  // structured data source can ever confirm this, so it only fires if Gwil types in a name (or
+  // several, comma-separated, in case more than one culprit high-fives Trump independently). Checked
+  // per category (your Golden Boot pick OR your Golden Glove pick OR your Young Player pick), same
+  // independent-stacking pattern as the Team of the Tournament bonus -- if more than one named
+  // culprit happens to match the same pick, the deduction stacks (-100 each).
+  const trumpCulprits = (tournamentFacts.trumpCulprit || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (trumpCulprits.length) {
+    [["Golden Boot", "trumpHighFiveBoot"], ["Golden Glove", "trumpHighFiveGlove"], ["Best Young Player", "trumpHighFiveYoung"]]
+      .forEach(([cat, id]) => {
+        const pick = pickFor(cat, player);
+        const matched = trumpCulprits.filter(culprit => namesMatch(pick, culprit));
+        if (matched.length) {
+          add(id, `${matched.join(", ")} high-fived Donald Trump (${cat} pick)`, "hit",
+            BONUS_RULE_POINTS.trumpHighFive * matched.length);
+        }
+      });
   }
 
   const total = items.reduce((s, it) => s + it.pts, 0);
@@ -1602,10 +1619,10 @@ const CATEGORY_RULE_IDS = {
   "Runner Up": ["runnerUp"],
   "3rd Place": ["thirdPlace"],
   "Worst Team": ["worstTeamQualifies"],
-  "Golden Boot": ["goldenBoot", "goldenBootGoals", "goldenBootDreamTeam"],
+  "Golden Boot": ["goldenBoot", "goldenBootGoals", "goldenBootDreamTeam", "trumpHighFiveBoot"],
   "Golden Ball": ["goldenBall"],
-  "Golden Glove": ["goldenGlove"],
-  "Best Young Player": ["youngPlayer", "youngPlayerDreamTeam"],
+  "Golden Glove": ["goldenGlove", "trumpHighFiveGlove"],
+  "Best Young Player": ["youngPlayer", "youngPlayerDreamTeam", "trumpHighFiveYoung"],
   "Dark Horse": ["darkHorse"],
   "Most Goals (Group Stage)": ["mostGroupGoals"],
   "Fewest Goals (Group Stage)": ["fewestGroupGoals"],
@@ -1676,12 +1693,70 @@ function renderBracketTable() {
   </div>
   <div class="bracket-extra">
     <p class="bracket-note">Yellow cards, a missed in-play penalty, and the Total Tournament Cards
-      guess don't have a reliable automatic data source yet, so they're not scored.</p>
+      guess don't have a reliable automatic data source yet, so they're not scored. See the
+      "Bonus Rules" tab for the full list of what's scored and when.</p>
     ${renderRedCardList(totals)}
-    <label class="trump-field">Trump high-five culprit (real name, only if it ever actually happens):
-      <input type="text" class="js-trump-culprit" value="${(tournamentFacts.trumpCulprit || "").replace(/"/g, "&quot;")}" placeholder="leave blank">
+    <label class="trump-field">Trump high-five culprit(s) (real name, only if it ever actually happens — separate multiple with commas):
+      <input type="text" class="js-trump-culprit" value="${(tournamentFacts.trumpCulprit || "").replace(/"/g, "&quot;")}" placeholder="leave blank, or e.g. Kylian Mbappé, Lamine Yamal">
     </label>
   </div>`;
+}
+
+// Plain-English reference for every Bonus & Deduction rule, sourced from
+// whatsapp-files/Bonus-deductions-points.xlsx. Point values are pulled directly from
+// DEFAULT_BRACKET_BONUS/BONUS_RULE_POINTS rather than hardcoded again, so this can never drift out
+// of sync with what computeBonusDeductionPoints() actually applies -- exists because the per-player
+// grid on the Bracket Picks tab doesn't explain *why* a badge appears once scores start populating.
+function renderBonusRulesTable() {
+  const bonusRows = [
+    { label: "Champions / Runner Up / 3rd Place pick correct", pts: `+${DEFAULT_BRACKET_BONUS}`, when: "Once the Final & 3rd-place playoff are played", scored: true },
+    { label: "Golden Boot / Golden Ball / Golden Glove / Best Young Player pick correct", pts: `+${DEFAULT_BRACKET_BONUS}`, when: "Once FIFA announces the awards, after the Final", scored: true },
+    { label: "Most Goals / Fewest Goals (Group Stage) pick correct", pts: `+${DEFAULT_BRACKET_BONUS}`, when: "Once every group has finished", scored: true },
+    { label: "Dark Horse pick reaches the semi-final", pts: `+${BONUS_RULE_POINTS.darkHorseSemi}`, when: "Once the semi-final line-up is set", scored: true },
+    { label: "Golden Boot pick named in the Team of the Tournament", pts: `+${BONUS_RULE_POINTS.teamOfTournament}`, when: "After the Final", scored: true },
+    { label: "Best Young Player pick named in the Team of the Tournament (stacks with the line above)", pts: `+${BONUS_RULE_POINTS.teamOfTournament}`, when: "After the Final", scored: true },
+    { label: "Total Tournament Goals guessed exactly", pts: `+${BONUS_RULE_POINTS.totalGoalsExact}`, when: "Once every fixture is resolved", scored: true },
+    { label: "Total Tournament Goals guessed within 10%", pts: `+${BONUS_RULE_POINTS.totalGoalsNear}`, when: "Once every fixture is resolved", scored: true },
+    { label: "Total Tournament Cards guessed exactly / within 10%", pts: "+20 / +5", when: "No reliable data source exists for a tournament-wide card total", scored: false },
+  ];
+  const deductionRows = [
+    { label: "Champions pick eliminated in the group stage", pts: `${BONUS_RULE_POINTS.championsGroupExit}`, when: "Once that team's group has finished", scored: true },
+    { label: "Worst Team pick qualifies out of the group stage", pts: `${BONUS_RULE_POINTS.worstTeamQualifies}`, when: "Once that team's group has finished", scored: true },
+    { label: "Champions pick knocked out by a non-seeded team (except in the Final)", pts: `${BONUS_RULE_POINTS.championsNonSeededLoss}`, when: "The moment that knockout result is in", scored: true },
+    { label: "Golden Boot pick scores 0 goals all tournament", pts: `${BONUS_RULE_POINTS.goldenBootZeroGoals}`, when: "After the Final", scored: true },
+    { label: "Golden Boot pick scores only 1 goal all tournament", pts: `${BONUS_RULE_POINTS.goldenBootOneGoal}`, when: "After the Final", scored: true },
+    { label: "Red card for your Golden Ball or Best Young Player pick, each time", pts: `${BONUS_RULE_POINTS.goldenBallRed}`, when: "Real-time, the moment Wikipedia records it", scored: true },
+    { label: "Yellow card for your Golden Ball or Best Young Player pick, each time", pts: "-5", when: "No aggregator source exists for individual yellow cards", scored: false },
+    { label: "Golden Boot pick misses a penalty in normal/extra time (shootout misses don't count)", pts: "-5", when: "Wikipedia's match data has no field for this at all", scored: false },
+    { label: "Golden Boot, Golden Glove or Best Young Player pick high-fives Donald Trump", pts: `${BONUS_RULE_POINTS.trumpHighFive}`, when: "Only if manually flagged on the Bracket Picks tab — no real data source could ever confirm this one", scored: true },
+  ];
+  // Points always carry an explicit sign in the data above, so the leading character alone tells us
+  // which leaderboard colour class to reuse -- same green/red as everywhere else in the app.
+  const ptsCell = (pts) => {
+    const cls = pts.trim().startsWith("-") ? "total-neg" : (pts.trim().startsWith("+") ? "total-pos" : "");
+    return `<td class="num ${cls}">${pts}</td>`;
+  };
+  const row = (r) => `<tr>
+    <td class="col-fixture">${r.label}${r.scored ? "" : ' <em>(not currently scored)</em>'}</td>
+    ${ptsCell(r.pts)}
+    <td>${r.when}</td>
+  </tr>`;
+  const sectionRow = (label) => `<tr class="rules-section-row"><td colspan="3">${label}</td></tr>`;
+
+  const body = sectionRow("Bonus Points") + bonusRows.map(row).join("") +
+    sectionRow("Deductions") + deductionRows.map(row).join("");
+
+  return `<div class="table-scroll">
+    <table class="games bonus-rules-table">
+      <thead>
+        <tr><th class="col-fixture">Rule</th><th class="num">Points</th><th>When it resolves</th></tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+  </div>
+  <p class="bracket-note">These refresh on the exact same schedule as live scores — on page load and
+    whenever someone taps "Fetch from Wikipedia" — never on a timer, so a result only shows up here
+    once someone next opens or refreshes the page after it happens.</p>`;
 }
 
 function renderPanels() {
@@ -1691,26 +1766,30 @@ function renderPanels() {
   const mwTabs = DATA.matchweeks.map((mw, i) =>
     `<button class="tab-btn ${i === activeTab ? "active" : ""}" data-tab="${i}" title="${mw.name}">${matchweekShortLabel(mw.name)}</button>`
   ).join("");
+  // Bracket Picks stays last (established convention) -- Bonus Rules sits immediately before it,
+  // satisfying "next to Bracket Picks" without reordering it out of the last slot.
+  const rulesTab = `<button class="tab-btn ${activeTab === "rules" ? "active" : ""}" data-tab="rules">Bonus Rules</button>`;
   const bracketTab = `<button class="tab-btn ${activeTab === "bracket" ? "active" : ""}" data-tab="bracket">Bracket Picks</button>`;
-  tabs.innerHTML = mwTabs + bracketTab;
+  tabs.innerHTML = mwTabs + rulesTab + bracketTab;
 
   const mwPanels = DATA.matchweeks.map((mw, i) =>
     `<div class="mw-panel ${i === activeTab ? "active" : ""}" data-panel="${i}">${renderMatchweekTable(mw, i)}</div>`
   ).join("");
+  const rulesPanel = `<div class="mw-panel ${activeTab === "rules" ? "active" : ""}" data-panel="rules">${renderBonusRulesTable()}</div>`;
   const bracketPanel = `<div class="mw-panel ${activeTab === "bracket" ? "active" : ""}" data-panel="bracket">${renderBracketTable()}</div>`;
-  panels.innerHTML = mwPanels + bracketPanel;
+  panels.innerHTML = mwPanels + rulesPanel + bracketPanel;
   // Safari/WebKit can cache a stale scrollHeight for a scroll container right after its content is
   // replaced via innerHTML, capping how far it'll let you scroll until something forces a reflow.
   // Reading offsetHeight does that for free.
   panels.querySelectorAll(".table-scroll").forEach(el => el.offsetHeight);
 
-  // The colour legend only means anything on the scored matchweek tables, not the bracket reference table.
-  document.getElementById("legend").style.display = activeTab === "bracket" ? "none" : "flex";
+  // The colour legend only means anything on the scored matchweek tables, not the reference tabs.
+  document.getElementById("legend").style.display = (activeTab === "bracket" || activeTab === "rules") ? "none" : "flex";
 
   tabs.querySelectorAll(".tab-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const t = btn.dataset.tab;
-      activeTab = t === "bracket" ? "bracket" : Number(t);
+      activeTab = (t === "bracket" || t === "rules") ? t : Number(t);
       renderPanels();
       attachInputListeners();
     });

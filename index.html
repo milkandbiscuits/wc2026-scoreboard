@@ -246,6 +246,7 @@
     border-radius: 6px;
     border: 2px solid #555;
   }
+  .bonus-info-box { cursor: help; border-bottom: 1px dotted currentColor; }
 
   .score-input {
     width: 28px;
@@ -337,6 +338,10 @@
     font-size: 12px;
     color: #777;
   }
+  .bracket-extra { padding: 12px 18px; font-size: 12.5px; }
+  .bracket-note { margin: 0 0 8px; color: #777; }
+  .trump-field { display: block; margin-top: 10px; color: #777; }
+  .trump-field input { margin-left: 6px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 12.5px; }
   .whatif-note {
     margin: 0;
     padding: 10px 18px;
@@ -510,6 +515,31 @@ function saveOverrides(overrides) {
 let overrides = loadOverrides(); // { "mwIndex_fixtureIndex": {h, a} }
 let unlockedKeys = new Set(); // fixtures temporarily reopened for editing this session (not persisted)
 
+const TOURNAMENT_FACTS_KEY = "wc2026_tournament_facts_v1";
+// Ground truth for the bonus/deduction rules, auto-pulled from Wikipedia the same way live scores
+// are -- resultsByGroup feeds computeGroupStandings() (recomputed fresh each render, not cached),
+// awards/redCards come from the two new tournament-level fetches. trumpCulprit is the one deliberate
+// manual exception (see BONUS_RULES) since that rule can never have a real data source.
+function loadTournamentFacts() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TOURNAMENT_FACTS_KEY)) || {};
+    return {
+      resultsByGroup: saved.resultsByGroup || {},
+      awards: saved.awards || {}, // { topScorer: {name, goals}, ball: name, glove: name, youngPlayer: name, dreamTeam: [names] }
+      redCards: saved.redCards || [], // [{ player, type: "red" | "yellow-red" }]
+      trumpCulprit: saved.trumpCulprit || "",
+      lastFetched: saved.lastFetched || null,
+    };
+  } catch (e) {
+    return { resultsByGroup: {}, awards: {}, redCards: [], trumpCulprit: "", lastFetched: null };
+  }
+}
+function saveTournamentFacts(facts) {
+  try { localStorage.setItem(TOURNAMENT_FACTS_KEY, JSON.stringify(facts)); }
+  catch (e) { /* localStorage unavailable -- continue in-memory only */ }
+}
+let tournamentFacts = loadTournamentFacts();
+
 function getActual(mwIndex, fixIndex, fixture) {
   const key = mwIndex + "_" + fixIndex;
   if (overrides[key] && (overrides[key].h !== "" && overrides[key].a !== "")) {
@@ -623,6 +653,10 @@ function computeTotals(excludeKey, onlyKeys) {
 
   DATA.players.forEach(p => {
     totals[p].total = DATA.matchweeks.reduce((s, mw, mi) => s + totals[p].byMw[mi] + totals[p].bonusMw[mi], 0);
+    const bd = computeBonusDeductionPoints(p);
+    totals[p].bonusDeductionItems = bd.items;
+    totals[p].bonusDeductionPts = bd.total;
+    totals[p].total += bd.total;
   });
 
   return totals;
@@ -635,6 +669,300 @@ function rankPlayers(totals) {
     .map(p => ({ player: p, total: totals[p].total }))
     .sort((a, b) => b.total - a.total || a.player.localeCompare(b.player))
     .map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+// --- Bonus/deduction facts derived purely from DATA -- no Wikipedia fetch needed, since these are
+// all implied by fixtures Gwil will add to DATA the same way every prior matchweek was added. ---
+//
+// The knockout stage doesn't exist in DATA yet (only the group-stage matchweeks do), so the exact
+// naming convention for the Final/3rd-place/semi-final matchweeks isn't known -- these match loosely
+// on keywords rather than an exact name, and simply resolve to "pending" (nulls) until that data
+// exists. Easy to tighten once the real matchweek names are known.
+function matchweekNamed(pattern, excludePattern) {
+  return DATA.matchweeks.find(mw => pattern.test(mw.name) && !(excludePattern && excludePattern.test(mw.name))) || null;
+}
+
+// Locates the Final and 3rd-place-playoff fixtures (each tagged with their matchweek, needed for
+// getActual's mwIndex/fixIndex lookup). Handles both a dedicated Final matchweek + dedicated
+// 3rd-place matchweek, and the case where one "Final Weekend" matchweek covers both games (3rd-place
+// is always played a day or two before the Final in real life, so sort by kickoff rather than
+// guessing array order -- a combined matchweek's name usually won't ALSO match the third-place
+// pattern, so this is detected structurally, by fixture count, not by name).
+function identifyFinalAndThirdFixtures() {
+  const finalMw = matchweekNamed(/\bfinal\b/i, /semi|quarter/i);
+  if (finalMw && finalMw.fixtures.length === 2) {
+    const sorted = finalMw.fixtures.slice().sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
+    return { thirdFixture: sorted[0], thirdMw: finalMw, finalFixture: sorted[1], finalMw };
+  }
+  const finalFixture = finalMw && finalMw.fixtures.length === 1 ? finalMw.fixtures[0] : null;
+  const thirdMw = matchweekNamed(/third[- ]?place|3rd[- ]?place/i);
+  const thirdFixture = thirdMw ? thirdMw.fixtures[0] : null;
+  return { thirdFixture, thirdMw, finalFixture, finalMw: finalFixture ? finalMw : null };
+}
+
+// Champion/Runner-up/3rd/4th are simply whoever wins/loses the Final and 3rd-place playoff fixture --
+// the existing getActual()/outcome() machinery already used for every other fixture is all that's
+// needed.
+function finalStandingsFacts() {
+  const result = { champion: null, runnerUp: null, third: null, fourth: null };
+  const { finalFixture, finalMw, thirdFixture, thirdMw } = identifyFinalAndThirdFixtures();
+
+  const applyOutcome = (fixture, mw, onHomeWin, onAwayWin) => {
+    if (!fixture || !mw) return;
+    const mwIndex = DATA.matchweeks.indexOf(mw);
+    const fixIndex = mw.fixtures.indexOf(fixture);
+    const actual = getActual(mwIndex, fixIndex, fixture);
+    if (!actual) return;
+    const out = outcome(actual.h, actual.a);
+    if (out === "H") onHomeWin(fixture); else if (out === "A") onAwayWin(fixture);
+  };
+  applyOutcome(finalFixture, finalMw,
+    f => { result.champion = f.home; result.runnerUp = f.away; },
+    f => { result.champion = f.away; result.runnerUp = f.home; });
+  applyOutcome(thirdFixture, thirdMw,
+    f => { result.third = f.home; result.fourth = f.away; },
+    f => { result.third = f.away; result.fourth = f.home; });
+  return result;
+}
+
+// Dark Horse "reaches the semi-final" -- knowable once the semi-final matchweek's fixtures exist,
+// regardless of whether those matches have been played yet (reaching the semi is the bar, not
+// winning it).
+function semifinalistTeams() {
+  const mw = matchweekNamed(/semi[- ]?final/i);
+  if (!mw) return null;
+  const teams = new Set();
+  mw.fixtures.forEach(f => { teams.add(f.home); teams.add(f.away); });
+  return [...teams];
+}
+
+// Total Tournament Goals -- pure sum over every fixture's resolved actual score, no Wikipedia
+// dependency at all. Only "complete" once every fixture in the tournament is resolved (mirrors
+// computeTotals()'s allResolved pattern) -- otherwise a partial sum would look like a final tally.
+function totalTournamentGoalsFact() {
+  let sum = 0, totalFixtures = 0, resolvedFixtures = 0;
+  DATA.matchweeks.forEach((mw, mwIndex) => {
+    mw.fixtures.forEach((fixture, fixIndex) => {
+      totalFixtures++;
+      const actual = getActual(mwIndex, fixIndex, fixture);
+      if (actual) { sum += actual.h + actual.a; resolvedFixtures++; }
+    });
+  });
+  return resolvedFixtures === totalFixtures ? sum : null;
+}
+
+// Pot 1 (seeded) teams for the 2026 draw, held Dec 5 2025 -- the three co-hosts plus the 9
+// highest-ranked qualifiers. Source: Wikipedia's "2026 FIFA World Cup draw" article. Fixed once the
+// draw happened, never changes mid-tournament. Compared by FIFA code (via TEAM_CODE, declared later
+// in this file) rather than name, so it composes with codeForTeamName() the same way every other
+// team comparison does -- resolved lazily inside isSeededCode() since TEAM_CODE isn't initialized
+// yet at this point in the script.
+const SEEDED_TEAM_NAMES = ["Mexico", "Canada", "United States", "Argentina", "Spain", "France", "England", "Brazil", "Portugal", "Netherlands", "Belgium", "Germany"];
+function isSeededCode(code) {
+  return SEEDED_TEAM_NAMES.some(name => TEAM_CODE[name] === code);
+}
+
+// Group-stage matchweeks in this file are named "Matchweek N"; anything else (Round of 32, Quarter-
+// finals, Semi-finals, Final, ...) is knockout stage. No explicit "stage" field exists per fixture,
+// so this naming convention is the only signal available -- reasonable since it's the same
+// convention HANDOVER.md documents for how matchweeks get added.
+function isKnockoutMatchweek(mw) {
+  return !/^Matchweek\s*\d+/i.test(mw.name);
+}
+
+// "Champions pick lost to a non-seeded team, except in the final" only makes sense for a single
+// head-to-head knockout loss -- a group-stage exit on points/GD has no single "opponent who knocked
+// you out" (that's the separate group-elimination deduction, via teamGroupStatus). Finds the most
+// recent resolved knockout fixture the given team (by FIFA code) lost. Working by code rather than
+// exact fixture name lets the caller pass in a fuzzy-resolved code from a free-text bracket pick.
+function knockoutEliminationLoss(teamCode) {
+  let loss = null;
+  DATA.matchweeks.forEach((mw, mwIndex) => {
+    if (!isKnockoutMatchweek(mw)) return;
+    mw.fixtures.forEach((fixture, fixIndex) => {
+      const homeCode = TEAM_CODE[fixture.home], awayCode = TEAM_CODE[fixture.away];
+      if (homeCode !== teamCode && awayCode !== teamCode) return;
+      const actual = getActual(mwIndex, fixIndex, fixture);
+      if (!actual) return;
+      const out = outcome(actual.h, actual.a);
+      const won = (out === "H" && homeCode === teamCode) || (out === "A" && awayCode === teamCode);
+      if (won || out === "D") return; // a draw can't happen in a World Cup knockout match (goes to
+        // extra time/penalties), but guard anyway rather than assume
+      const opponentCode = homeCode === teamCode ? awayCode : homeCode;
+      const kickoffMs = new Date(fixture.kickoff).getTime();
+      if (!loss || kickoffMs > loss.kickoffMs) loss = { opponentCode, fixture, mw, kickoffMs };
+    });
+  });
+  return loss;
+}
+
+// Returns "hit" (deduction applies), "miss" (team's still in, or went out to a seeded team / lost the
+// final), or "pending" (team hasn't had a resolved knockout loss yet -- could still happen later).
+function nonSeededUpsetStatus(teamCode) {
+  const loss = knockoutEliminationLoss(teamCode);
+  if (!loss) return { status: "pending" };
+  const { finalFixture } = identifyFinalAndThirdFixtures();
+  if (finalFixture === loss.fixture) return { status: "miss" }; // losing the final itself is excepted
+  if (isSeededCode(loss.opponentCode)) return { status: "miss" };
+  return { status: "hit", opponentCode: loss.opponentCode };
+}
+
+// --- BONUS_RULES engine -- from whatsapp-files/Bonus-deductions-points.xlsx, mapped onto the 13
+// DATA.bracketPicks categories. Every rule resolves to "pending" (not yet knowable), "hit" (applies,
+// points counted), or "miss" (resolved against the player, 0 pts). A deduction rule that simply
+// didn't fire is a "miss", not a negative event in its own right. Folded into computeTotals() below.
+// Default for any bracket category without its own listed point value: +5 for a correct pick.
+const DEFAULT_BRACKET_BONUS = 5;
+const BONUS_RULE_POINTS = {
+  darkHorseSemi: 20, teamOfTournament: 2, totalGoalsExact: 20, totalGoalsNear: 5,
+  championsGroupExit: -10, goldenBootZeroGoals: -10, goldenBootOneGoal: -5, worstTeamQualifies: -10,
+  championsNonSeededLoss: -5, goldenBallRed: -10, trumpHighFive: -100,
+};
+
+function pickFor(category, player) {
+  return DATA.bracketPicks.picks[category][player];
+}
+
+// Phase 2 (deferred, see HANDOVER.md): yellow cards for Golden Ball/Young Player picks, a Golden Boot
+// pick missing an in-play penalty, and Total Tournament Cards have no reliable Wikipedia data source
+// -- confirmed during research (no aggregator page exists for any of these). Left as permanently-
+// pending stub rules rather than silently dropped, so the UI correctly shows "not yet possible"
+// instead of a false 0, and wiring them up later (if a source is ever found) is additive.
+function computeBonusDeductionPoints(player) {
+  const items = [];
+  const add = (id, label, status, pts) => items.push({ id, label, status, pts: status === "hit" ? pts : 0 });
+
+  const finals = finalStandingsFacts();
+  const semis = semifinalistTeams();
+  const totalGoalsActual = totalTournamentGoalsFact();
+  const groupStandings = computeGroupStandings(tournamentFacts.resultsByGroup);
+  const awards = tournamentFacts.awards || {};
+  const redCardEvents = tournamentFacts.redCards || [];
+
+  const teamPick = (id, label, category, truthName) => {
+    if (!truthName) { add(id, label, "pending", 0); return; }
+    add(id, label, teamsMatch(pickFor(category, player), truthName) ? "hit" : "miss", DEFAULT_BRACKET_BONUS);
+  };
+  const personPick = (id, label, category, truthName) => {
+    if (!truthName) { add(id, label, "pending", 0); return; }
+    add(id, label, namesMatch(pickFor(category, player), truthName) ? "hit" : "miss", DEFAULT_BRACKET_BONUS);
+  };
+
+  teamPick("champions", "Champions correct", "Champions", finals.champion);
+  teamPick("runnerUp", "Runner Up correct", "Runner Up", finals.runnerUp);
+  teamPick("thirdPlace", "3rd Place correct", "3rd Place", finals.third);
+  personPick("goldenBoot", "Golden Boot correct", "Golden Boot", awards.topScorer && awards.topScorer.name);
+  personPick("goldenBall", "Golden Ball correct", "Golden Ball", awards.ball);
+  personPick("goldenGlove", "Golden Glove correct", "Golden Glove", awards.glove);
+  personPick("youngPlayer", "Best Young Player correct", "Best Young Player", awards.youngPlayer);
+
+  // Dark Horse: +20 if the pick reaches the semi-final -- not a single "correct answer" comparison.
+  if (semis === null) {
+    add("darkHorse", "Dark Horse reaches semi-final", "pending", 0);
+  } else {
+    const pick = pickFor("Dark Horse", player);
+    add("darkHorse", "Dark Horse reaches semi-final",
+      semis.some(team => teamsMatch(pick, team)) ? "hit" : "miss", BONUS_RULE_POINTS.darkHorseSemi);
+  }
+
+  // Team of the Tournament: independent +2 for the Golden Boot pick and +2 for the Young Player pick
+  // (confirmed stackable, up to +4 total).
+  if (!awards.dreamTeam || !awards.dreamTeam.length) {
+    add("goldenBootDreamTeam", "Golden Boot named Team of the Tournament", "pending", 0);
+    add("youngPlayerDreamTeam", "Young Player named Team of the Tournament", "pending", 0);
+  } else {
+    const bootPick = pickFor("Golden Boot", player), youngPick = pickFor("Best Young Player", player);
+    add("goldenBootDreamTeam", "Golden Boot named Team of the Tournament",
+      awards.dreamTeam.some(n => namesMatch(bootPick, n)) ? "hit" : "miss", BONUS_RULE_POINTS.teamOfTournament);
+    add("youngPlayerDreamTeam", "Young Player named Team of the Tournament",
+      awards.dreamTeam.some(n => namesMatch(youngPick, n)) ? "hit" : "miss", BONUS_RULE_POINTS.teamOfTournament);
+  }
+
+  // Total Tournament Goals: +20 exact, +5 within 10%.
+  if (totalGoalsActual === null) {
+    add("totalGoals", "Total Tournament Goals", "pending", 0);
+  } else {
+    const guess = Number(pickFor("Total Tournament Goals", player));
+    const diffPct = Math.abs(guess - totalGoalsActual) / totalGoalsActual;
+    if (guess === totalGoalsActual) add("totalGoals", "Total Tournament Goals (exact)", "hit", BONUS_RULE_POINTS.totalGoalsExact);
+    else if (diffPct <= 0.10) add("totalGoals", "Total Tournament Goals (within 10%)", "hit", BONUS_RULE_POINTS.totalGoalsNear);
+    else add("totalGoals", "Total Tournament Goals", "miss", 0);
+  }
+
+  add("totalCards", "Total Tournament Cards (no data source yet)", "pending", 0); // Phase 2 stub
+
+  // Most/Fewest Goals (Group Stage): +5 each, only once every group's finished.
+  const goalsLeaders = groupStageGoalsLeaders(groupStandings);
+  if (!goalsLeaders) {
+    add("mostGroupGoals", "Most Goals (Group Stage)", "pending", 0);
+    add("fewestGroupGoals", "Fewest Goals (Group Stage)", "pending", 0);
+  } else {
+    const mostPickCode = codeForTeamName(pickFor("Most Goals (Group Stage)", player));
+    const fewestPickCode = codeForTeamName(pickFor("Fewest Goals (Group Stage)", player));
+    add("mostGroupGoals", "Most Goals (Group Stage)",
+      mostPickCode && mostPickCode === goalsLeaders.most.code ? "hit" : "miss", DEFAULT_BRACKET_BONUS);
+    add("fewestGroupGoals", "Fewest Goals (Group Stage)",
+      fewestPickCode && fewestPickCode === goalsLeaders.fewest.code ? "hit" : "miss", DEFAULT_BRACKET_BONUS);
+  }
+
+  // --- Deductions ---
+  const championsCode = codeForTeamName(pickFor("Champions", player));
+  const championsGroupStatus = championsCode ? teamGroupStatus(championsCode, groupStandings) : null;
+  add("championsGroupExit", "Champions pick eliminated in groups",
+    !championsGroupStatus ? "pending" : (!championsGroupStatus.qualified ? "hit" : "miss"),
+    BONUS_RULE_POINTS.championsGroupExit);
+
+  const worstCode = codeForTeamName(pickFor("Worst Team", player));
+  const worstGroupStatus = worstCode ? teamGroupStatus(worstCode, groupStandings) : null;
+  add("worstTeamQualifies", "Worst Team pick qualifies from groups",
+    !worstGroupStatus ? "pending" : (worstGroupStatus.qualified ? "hit" : "miss"),
+    BONUS_RULE_POINTS.worstTeamQualifies);
+
+  if (!championsCode) {
+    add("championsNonSeededLoss", "Champions pick lost to a non-seeded team", "pending", 0);
+  } else {
+    const upset = nonSeededUpsetStatus(championsCode);
+    add("championsNonSeededLoss", "Champions pick lost to a non-seeded team",
+      upset.status, BONUS_RULE_POINTS.championsNonSeededLoss);
+  }
+
+  if (!awards.topScorer || awards.topScorer.goals === null || awards.topScorer.goals === undefined) {
+    add("goldenBootGoals", "Golden Boot goal tally", "pending", 0);
+  } else if (!namesMatch(pickFor("Golden Boot", player), awards.topScorer.name)) {
+    add("goldenBootGoals", "Golden Boot goal tally", "miss", 0);
+  } else if (awards.topScorer.goals === 0) {
+    add("goldenBootGoals", "Golden Boot pick scored 0 goals", "hit", BONUS_RULE_POINTS.goldenBootZeroGoals);
+  } else if (awards.topScorer.goals === 1) {
+    add("goldenBootGoals", "Golden Boot pick scored only 1 goal", "hit", BONUS_RULE_POINTS.goldenBootOneGoal);
+  } else {
+    add("goldenBootGoals", "Golden Boot goal tally", "miss", 0);
+  }
+
+  // Red card deductions for Golden Ball / Young Player picks -- repeatable, one item per event.
+  const ballPick = pickFor("Golden Ball", player), youngPick = pickFor("Best Young Player", player);
+  redCardEvents.forEach((event, i) => {
+    if (namesMatch(ballPick, event.player)) {
+      add(`redCardBall${i}`, `Red card: Golden Ball pick (${event.player})`, "hit", BONUS_RULE_POINTS.goldenBallRed);
+    }
+    if (namesMatch(youngPick, event.player)) {
+      add(`redCardYoung${i}`, `Red card: Young Player pick (${event.player})`, "hit", BONUS_RULE_POINTS.goldenBallRed);
+    }
+  });
+
+  add("yellowCards", "Yellow cards for Golden Ball/Young Player pick (no data source yet)", "pending", 0); // Phase 2 stub
+  add("missedPenalty", "Golden Boot pick misses an in-play penalty (no data source yet)", "pending", 0); // Phase 2 stub
+
+  // Trump high-five -- the one deliberate manual exception (see tournamentFacts.trumpCulprit); no
+  // structured data source can ever confirm this, so it only fires if Gwil types in a name.
+  if (tournamentFacts.trumpCulprit) {
+    const culprit = tournamentFacts.trumpCulprit;
+    const hits = ["Golden Boot", "Golden Glove", "Best Young Player"]
+      .some(cat => namesMatch(pickFor(cat, player), culprit));
+    if (hits) add("trumpHighFive", `${culprit} high-fived Donald Trump`, "hit", BONUS_RULE_POINTS.trumpHighFive);
+  }
+
+  const total = items.reduce((s, it) => s + it.pts, 0);
+  return { items, total };
 }
 
 // Every fixture across every matchweek, flattened and sorted by true kickoff order -- ignores
@@ -959,8 +1287,8 @@ function renderLeaderboard() {
 
   const head = document.getElementById("leaderboard-head");
   head.innerHTML = "<th>#</th><th>Player</th>" +
-    DATA.matchweeks.map((mw, i) => `<th class="num">${mw.name}</th>`).join("") +
-    `<th class="num">Total</th><th class="num">Correct</th><th class="num">Exact</th><th class="num">Pending</th>`;
+    DATA.matchweeks.map((mw, i) => `<th class="num" title="${mw.name}">${matchweekShortLabel(mw.name)}</th>`).join("") +
+    `<th class="num">Bonus</th><th class="num">Total</th><th class="num">Correct</th><th class="num">Exact</th><th class="num">Pending</th>`;
 
   const maxCorrect = Math.max(...rows.map(r => r.correct));
   const maxExact = Math.max(...rows.map(r => r.exactCount));
@@ -986,10 +1314,18 @@ function renderLeaderboard() {
     const exactCell = (maxExact > 0 && r.exactCount === maxExact)
       ? `<span class="stat-leader-box" title="Most exact scores">${r.exactCount}</span>`
       : r.exactCount;
+    const bonusV = r.bonusDeductionPts;
+    const bonusDisplay = `${bonusV > 0 ? "+" : ""}${bonusV}`;
+    const bonusCls = bonusV > 0 ? "total-pos" : (bonusV < 0 ? "total-neg" : "");
+    const bonusHits = r.bonusDeductionItems.filter(it => it.status === "hit");
+    const bonusCell = bonusHits.length
+      ? `<span class="bonus-info-box" title="${bonusHits.map(it => `${it.label}: ${it.pts > 0 ? "+" : ""}${it.pts}`).join("; ").replace(/"/g, "&quot;")}">${bonusDisplay}</span>`
+      : bonusDisplay;
     return `<tr>
       <td><span class="rank-badge">${i + 1}</span></td>
       <td>${playerLabel(r.player, "leaderboard-mug")}</td>
       ${mwCells}
+      <td class="num ${bonusCls}">${bonusCell}</td>
       <td class="num ${totalClass}">${r.total > 0 ? "+" : ""}${r.total}</td>
       <td class="num">${correctCell}</td>
       <td class="num">${exactCell}</td>
@@ -1004,6 +1340,23 @@ function renderLeaderboard() {
 }
 
 function fixtureKey(mwIndex, fixIndex) { return mwIndex + "_" + fixIndex; }
+
+// Short display label for a matchweek/round name -- column headers and tabs get cramped once the
+// knockout rounds stack up alongside MW1-3. Purely cosmetic: `mw.name` itself stays full and
+// descriptive ("Matchweek 3", "Round of 16", "Quarter-finals", ...) since isKnockoutMatchweek() and
+// matchweekNamed() (used by the bonus/deduction engine) pattern-match against the full name -- only
+// ever rename mw.name itself with matching wording, never to one of these abbreviations directly.
+function matchweekShortLabel(name) {
+  const mwNum = name.match(/^Matchweek\s*(\d+)/i);
+  if (mwNum) return `MW${mwNum[1]}`;
+  if (/round of 32|last 32/i.test(name)) return "L32";
+  if (/round of 16|last 16/i.test(name)) return "L16";
+  if (/quarter/i.test(name)) return "Q";
+  if (/semi/i.test(name)) return "SF";
+  if (/third|3rd/i.test(name)) return "3rd";
+  if (/\bfinal\b/i.test(name)) return "F";
+  return name; // unrecognised naming -- show as-is rather than guess
+}
 
 function onScoreInput(mwIndex, fixIndex, side, value) {
   const key = fixtureKey(mwIndex, fixIndex);
@@ -1242,12 +1595,68 @@ function renderCompactFixtureBanner(target, guidance) {
     ${guidance}`;
 }
 
-// Tournament bracket picks (Champions, Golden Boot, etc.) -- reference only, not scored here.
+// Which BONUS_RULES item id(s) feed each bracket category's status badge -- a category can have more
+// than one (e.g. Champions carries the correct-pick bonus AND two separate deduction risks).
+const CATEGORY_RULE_IDS = {
+  "Champions": ["champions", "championsGroupExit", "championsNonSeededLoss"],
+  "Runner Up": ["runnerUp"],
+  "3rd Place": ["thirdPlace"],
+  "Worst Team": ["worstTeamQualifies"],
+  "Golden Boot": ["goldenBoot", "goldenBootGoals", "goldenBootDreamTeam"],
+  "Golden Ball": ["goldenBall"],
+  "Golden Glove": ["goldenGlove"],
+  "Best Young Player": ["youngPlayer", "youngPlayerDreamTeam"],
+  "Dark Horse": ["darkHorse"],
+  "Most Goals (Group Stage)": ["mostGroupGoals"],
+  "Fewest Goals (Group Stage)": ["fewestGroupGoals"],
+  "Total Tournament Goals": ["totalGoals"],
+  "Total Tournament Cards": ["totalCards"],
+};
+
+// One cell's worth of markup: the raw pick, plus (once at least one of this category's rules has
+// resolved) a single combined status badge -- ⏳ while any of its rules are still pending (more
+// could still come in), otherwise ✅/➖/❌ for the net point swing once everything's settled. Hover
+// for the per-rule breakdown, same pattern as the leaderboard's Bonus column.
+function bracketCellContent(category, player, totals) {
+  const ids = CATEGORY_RULE_IDS[category] || [];
+  const items = totals[player].bonusDeductionItems.filter(it => ids.includes(it.id));
+  const pick = DATA.bracketPicks.picks[category][player];
+  if (!items.length) return pick;
+  const anyPending = items.some(it => it.status === "pending");
+  const sum = items.reduce((s, it) => s + it.pts, 0);
+  const title = items.map(it => {
+    const v = it.status === "pending" ? "pending" : it.status === "miss" ? "no" : `${it.pts > 0 ? "+" : ""}${it.pts}`;
+    return `${it.label}: ${v}`;
+  }).join("; ").replace(/"/g, "&quot;");
+  const icon = anyPending ? "⏳" : (sum > 0 ? "✅" : (sum < 0 ? "❌" : "➖"));
+  const cls = sum > 0 ? "total-pos" : (sum < 0 ? "total-neg" : "");
+  return `${pick}<br><span class="bonus-info-box ${cls}" title="${title}">${icon}${sum !== 0 ? ` ${sum > 0 ? "+" : ""}${sum}` : ""}</span>`;
+}
+
+// Red card hits don't map to a single category cell (they're tied to whichever Golden Ball/Young
+// Player pick the carded real-world player matches, and can fire more than once), so they're listed
+// separately rather than crammed into the grid.
+function renderRedCardList(totals) {
+  const events = tournamentFacts.redCards || [];
+  if (!events.length) return `<p class="bracket-note">No red cards recorded for the tournament yet.</p>`;
+  const rows = events.map((event, i) => {
+    const hitPlayers = DATA.players.filter(p =>
+      totals[p].bonusDeductionItems.some(it => it.status === "hit" && (it.id === `redCardBall${i}` || it.id === `redCardYoung${i}`)));
+    if (!hitPlayers.length) return null;
+    return `<div>🟥 ${event.player} — costs ${hitPlayers.join(", ")} -10 each</div>`;
+  }).filter(Boolean);
+  return rows.length ? rows.join("") : `<p class="bracket-note">Red cards recorded, but none matched a Golden Ball/Young Player pick.</p>`;
+}
+
+// Tournament bracket picks (Champions, Golden Boot, etc.) -- live-scored against the bonus/deduction
+// rules from whatsapp-files/Bonus-deductions-points.xlsx, auto-pulled from Wikipedia the same way
+// live scores are (see fetchTournamentFacts/computeGroupStandings). Facts that can't be resolved yet
+// just show ⏳; nothing here is ever guessed.
 function renderBracketTable() {
+  const totals = computeTotals();
   const playerHeaders = DATA.players.map(p => `<th>${playerLabel(p, "header-mug")}</th>`).join("");
   const rows = DATA.bracketPicks.categories.map(cat => {
-    const picks = DATA.bracketPicks.picks[cat];
-    const cells = DATA.players.map(p => `<td class="player-cell">${picks[p]}</td>`).join("");
+    const cells = DATA.players.map(p => `<td class="player-cell">${bracketCellContent(cat, p, totals)}</td>`).join("");
     return `<tr>
       <td class="col-fixture">${cat}</td>
       ${cells}
@@ -1264,6 +1673,14 @@ function renderBracketTable() {
       </thead>
       <tbody>${rows}</tbody>
     </table>
+  </div>
+  <div class="bracket-extra">
+    <p class="bracket-note">Yellow cards, a missed in-play penalty, and the Total Tournament Cards
+      guess don't have a reliable automatic data source yet, so they're not scored.</p>
+    ${renderRedCardList(totals)}
+    <label class="trump-field">Trump high-five culprit (real name, only if it ever actually happens):
+      <input type="text" class="js-trump-culprit" value="${(tournamentFacts.trumpCulprit || "").replace(/"/g, "&quot;")}" placeholder="leave blank">
+    </label>
   </div>`;
 }
 
@@ -1272,7 +1689,7 @@ function renderPanels() {
   const panels = document.getElementById("panels");
 
   const mwTabs = DATA.matchweeks.map((mw, i) =>
-    `<button class="tab-btn ${i === activeTab ? "active" : ""}" data-tab="${i}">${mw.name}</button>`
+    `<button class="tab-btn ${i === activeTab ? "active" : ""}" data-tab="${i}" title="${mw.name}">${matchweekShortLabel(mw.name)}</button>`
   ).join("");
   const bracketTab = `<button class="tab-btn ${activeTab === "bracket" ? "active" : ""}" data-tab="bracket">Bracket Picks</button>`;
   tabs.innerHTML = mwTabs + bracketTab;
@@ -1329,23 +1746,81 @@ function attachInputListeners() {
       renderAll();
     });
   });
+  const trumpInput = document.querySelector(".js-trump-culprit");
+  if (trumpInput) {
+    trumpInput.addEventListener("blur", () => {
+      const value = trumpInput.value.trim();
+      if (value === (tournamentFacts.trumpCulprit || "")) return;
+      tournamentFacts.trumpCulprit = value;
+      saveTournamentFacts(tournamentFacts);
+      renderAll();
+    });
+    trumpInput.addEventListener("keydown", (e) => { if (e.key === "Enter") trumpInput.blur(); });
+  }
 }
 
 // --- Live score fetching (Wikipedia group-stage pages, no API key, CORS-enabled) ---
 
 const TEAM_CODE = {
   "Algeria": "ALG", "Argentina": "ARG", "Australia": "AUS", "Austria": "AUT", "Belgium": "BEL",
-  "Bosnia and Herzegovina": "BIH", "Brazil": "BRA", "Cabo Verde": "CPV", "Canada": "CAN",
-  "Colombia": "COL", "Congo DR": "COD", "Croatia": "CRO", "Curaçao": "CUW", "Czechia": "CZE",
+  "Bosnia and Herzegovina": "BIH", "Brazil": "BRA", "Cabo Verde": "CPV", "Cape Verde": "CPV",
+  "Canada": "CAN", "Colombia": "COL", "Congo DR": "COD", "Croatia": "CRO", "Curaçao": "CUW",
+  "Curacao": "CUW", "Czechia": "CZE", "Czech Republic": "CZE",
   "Côte d'Ivoire": "CIV", "Ecuador": "ECU", "Egypt": "EGY", "England": "ENG", "France": "FRA",
   "Germany": "GER", "Ghana": "GHA", "Haiti": "HAI", "IR Iran": "IRN", "Iraq": "IRQ", "Japan": "JPN",
   "Jordan": "JOR", "Korea Republic": "KOR", "South Korea": "KOR", "Mexico": "MEX", "Morocco": "MAR",
-  "Netherlands": "NED", "New Zealand": "NZL", "Norway": "NOR", "Panama": "PAN", "Paraguay": "PAR",
-  "Portugal": "POR", "Qatar": "QAT", "Saudi Arabia": "KSA", "Scotland": "SCO", "Senegal": "SEN",
-  "South Africa": "RSA", "Spain": "ESP", "Sweden": "SWE", "Switzerland": "SUI", "Tunisia": "TUN",
-  "Türkiye": "TUR", "United States": "USA", "Uruguay": "URU", "Uzbekistan": "UZB",
+  "Netherlands": "NED", "New Zealand": "NZL", "New Zeland": "NZL", "Norway": "NOR", "Panama": "PAN",
+  "Paraguay": "PAR", "Portugal": "POR", "Qatar": "QAT", "Saudi Arabia": "KSA", "Scotland": "SCO",
+  "Senegal": "SEN", "South Africa": "RSA", "Spain": "ESP", "Sweden": "SWE", "Switzerland": "SUI",
+  "Tunisia": "TUN", "Türkiye": "TUR", "Turkey": "TUR", "United States": "USA", "Uruguay": "URU",
+  "Uzbekistan": "UZB",
 };
 const WIKI_GROUPS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+
+// --- Name matching for free-text bracket picks ---
+// Picks were typed by hand and are full of accents/nicknames/typos ("Mbappé" vs "Mbappe" vs
+// "Kylian Mbappe" vs the joke bot's "Mvappe"). normalizeName() collapses spelling noise;
+// namesMatch() adds a surname fallback (so "Kane" matches "Harry Kane") and a small edit-distance
+// tolerance (so a one-character typo like "Mvappe" still matches "Mbappe").
+function normalizeName(str) {
+  return String(str || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const curr = [i];
+    for (let j = 1; j <= n; j++) {
+      curr[j] = a[i - 1] === b[j - 1] ? prev[j - 1] : 1 + Math.min(prev[j - 1], prev[j], curr[j - 1]);
+    }
+    prev = curr;
+  }
+  return prev[n];
+}
+function namesMatch(pick, truth) {
+  if (!pick || !truth) return false;
+  const a = normalizeName(pick), b = normalizeName(truth);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const aLast = a.split(" ").pop(), bLast = b.split(" ").pop();
+  if (aLast === bLast && aLast.length > 2) return true;
+  const dist = levenshtein(a, b);
+  return dist <= Math.max(1, Math.floor(Math.min(a.length, b.length) * 0.15));
+}
+// Team names route through TEAM_CODE first (already canonicalizes most variants via FIFA codes),
+// falling back to namesMatch() for anything TEAM_CODE doesn't recognise.
+function teamsMatch(pick, truth) {
+  const codeA = TEAM_CODE[pick], codeB = TEAM_CODE[truth];
+  if (codeA && codeB) return codeA === codeB;
+  return namesMatch(pick, truth);
+}
 
 // Wikipedia's group-stage pages store each result as a balanced {{#invoke:football box|main ... }}
 // template call, which can contain nested {{...}} (flags, score links) — a regex alone can't safely
@@ -1431,8 +1906,112 @@ async function fetchWithOneRetry(fn) {
   }
 }
 
+// Strips a raw infobox field value down to a plain display name: wikilinks ([[Foo|Bar]] -> Bar,
+// [[Foo]] -> Foo), template calls (flag icons etc.), leftover HTML and stray closing braces from a
+// field that happened to be last in the template.
+function parseAwardField(raw) {
+  if (!raw) return null;
+  const text = raw
+    .replace(/\{\{[^{}]*\}\}/g, "")
+    .replace(/\[\[[^\]|]*\|([^\]]+)\]\]/g, "$1")
+    .replace(/\[\[([^\]]+)\]\]/g, "$1")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\}+\s*$/, "")
+    .trim();
+  return text || null;
+}
+// The Golden Boot infobox field carries the goal tally inline, e.g. "Kylian Mbappé (8 goals)".
+function parseTopScorerField(raw) {
+  const text = parseAwardField(raw);
+  if (!text) return null;
+  const m = text.match(/^(.*?)\s*\(\s*(\d+)\s*goals?\s*\)\s*$/i);
+  return m ? { name: m[1].trim(), goals: Number(m[2]) } : { name: text, goals: null };
+}
+
+// Main tournament article's infobox carries the post-tournament awards once FIFA announces them
+// (Golden Boot/Ball/Glove/Best Young Player) -- parameter names confirmed against the 2022 article's
+// identical infobox template: top_scorer, player, goalkeeper, young_player. Until the tournament is
+// far enough along these fields are simply blank, which resolves to nulls below (treated as
+// "pending" by BONUS_RULES, never a false miss).
+// Main tournament article's infobox carries the post-tournament awards once FIFA announces them
+// (Golden Boot/Ball/Glove/Best Young Player) -- parameter names confirmed against the 2022 article's
+// identical infobox template: top_scorer, player, goalkeeper, young_player. Until the tournament is
+// far enough along these fields are simply blank, which resolves to nulls (treated as "pending" by
+// BONUS_RULES, never a false miss).
+function parseTournamentAwards(wikitext) {
+  if (!wikitext) return null;
+
+  // Infobox fields are one per line, so capture the whole rest of the line after "=" -- a naive
+  // char-class approach that stops at the next "|" breaks here, since template calls inside the
+  // value (e.g. a flag icon "{{flagg|FRA}}") legitimately contain their own "|". Critically, the gaps
+  // around the field name/"=" must only match HORIZONTAL whitespace ([ \t], not \s) -- \s also matches
+  // newlines, so a field with an empty value (just "| player         =" then nothing) would have its
+  // trailing \s* greedily swallow the newline and land the capture group on the *next* line's text.
+  const field = (name) => {
+    const m = wikitext.match(new RegExp(`^\\|[ \\t]*${name}[ \\t]*=[ \\t]*(.*)$`, "m"));
+    return m ? m[1].trim() : null;
+  };
+
+  // Best-effort: the Dream Team / Team of the Tournament section, if/once Wikipedia has populated
+  // it. Section heading wording isn't confirmed for 2026 yet (the tournament's still in progress) --
+  // failing to find it just means dreamTeam stays empty, never an error.
+  let dreamTeam = [];
+  const section = wikitext.match(/==\s*(?:Dream Team|Team of the Tournament)\s*==([\s\S]*?)(?:\n==|$)/i);
+  if (section) {
+    dreamTeam = [...section[1].matchAll(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g)]
+      .map(m => m[1].trim())
+      .filter(name => !/^(File|Image):/i.test(name));
+  }
+
+  return {
+    topScorer: parseTopScorerField(field("top_scorer")),
+    ball: parseAwardField(field("player")),
+    glove: parseAwardField(field("goalkeeper")),
+    youngPlayer: parseAwardField(field("young_player")),
+    dreamTeam,
+  };
+}
+
+// "List of FIFA World Cup red cards" is a maintained cross-tournament reference table. Rows don't
+// repeat the tournament name (it's in a rowspan'd cell shared across a whole tournament's block of
+// rows), but every row's "Final score" column links to that match's own group-page section (e.g.
+// "[[2026 FIFA World Cup Group A#Mexico vs South Africa|0–2]]"), so filtering rows whose wikitext
+// mentions "2026 FIFA World Cup" reliably catches every 2026 row regardless of rowspan grouping.
+function parseRedCardEvents(wikitext) {
+  if (!wikitext) return [];
+  const events = [];
+  const rows = wikitext.split(/\n\|-/);
+  for (const row of rows) {
+    if (!/2026 FIFA World Cup/.test(row)) continue;
+    const links = [...row.matchAll(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g)].map(m => m[1].trim());
+    const player = links.find(name =>
+      !/^(File|Image):/i.test(name) && !/FIFA World Cup/i.test(name) && !name.includes("#"));
+    if (!player) continue;
+    events.push({ player });
+  }
+  return events;
+}
+
+// One batched request for both tournament-level pages (same "never make Wikipedia requests
+// separately" rule as the 12 group pages). Returns null on total failure (network down) so the
+// caller can leave previously-known facts untouched rather than wiping them out.
+async function fetchTournamentFacts() {
+  try {
+    const byTitle = await fetchWithOneRetry(() => fetchWikitextByTitle([
+      "2026 FIFA World Cup", "List of FIFA World Cup red cards",
+    ]));
+    return {
+      awards: parseTournamentAwards(byTitle["2026 FIFA World Cup"]),
+      redCards: parseRedCardEvents(byTitle["List of FIFA World Cup red cards"]),
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 async function fetchAllGroups() {
   const allResults = [];
+  const resultsByGroup = {}; // group letter -> [{code1, code2, h, a}] -- feeds computeGroupStandings()
   const failedGroups = [];
   // MediaWiki normalizes "_" to " " in returned page.title, so build titles with spaces here too --
   // otherwise the lookup below (byTitle[groupTitles[i]]) silently misses every entry.
@@ -1442,39 +2021,130 @@ async function fetchAllGroups() {
   try {
     byTitle = await fetchWithOneRetry(() => fetchWikitextByTitle(groupTitles));
   } catch (e) {
-    return { allResults, failedGroups: WIKI_GROUPS.slice() };
+    return { allResults, resultsByGroup, failedGroups: WIKI_GROUPS.slice() };
   }
 
   // A particularly notable match (a dramatic finish, a controversy) sometimes gets spun off into its
   // own dedicated Wikipedia article, with the group page transcluding the score box from there via
   // {{#lst:Some Article Title|SectionName}} instead of embedding it directly. That's invisible to a
   // plain wikitext scan of the group page, so: detect those references and fetch the referenced
-  // articles too, parsing them the same way.
+  // articles too, parsing them the same way. Track which group referenced it so the result can still
+  // be attributed to the right group's standings.
   const spunOffTitles = new Set();
+  const spunOffGroupOf = new Map();
   WIKI_GROUPS.forEach((g, i) => {
     const wt = byTitle[groupTitles[i]];
     if (!wt) { failedGroups.push(g); return; }
-    allResults.push(...parseGroupWikitext(wt));
-    for (const m of wt.matchAll(/\{\{#lst:([^|}]+)\|/g)) spunOffTitles.add(m[1].trim());
+    const results = parseGroupWikitext(wt);
+    allResults.push(...results);
+    resultsByGroup[g] = results.slice();
+    for (const m of wt.matchAll(/\{\{#lst:([^|}]+)\|/g)) {
+      const title = m[1].trim();
+      spunOffTitles.add(title);
+      spunOffGroupOf.set(title, g);
+    }
   });
 
   if (spunOffTitles.size) {
     try {
       const extra = await fetchWithOneRetry(() => fetchWikitextByTitle([...spunOffTitles]));
-      Object.values(extra).forEach(wt => allResults.push(...parseGroupWikitext(wt)));
+      Object.entries(extra).forEach(([title, wt]) => {
+        const results = parseGroupWikitext(wt);
+        allResults.push(...results);
+        const g = spunOffGroupOf.get(title);
+        if (g) (resultsByGroup[g] = resultsByGroup[g] || []).push(...results);
+      });
     } catch (e) {
       // not fatal -- the main 12 groups already loaded fine, this is just one extra match's score
     }
   }
 
-  return { allResults, failedGroups };
+  return { allResults, resultsByGroup, failedGroups };
+}
+
+// FIFA group-stage tiebreakers, simplified to points / goal difference / goals scored -- head-to-head
+// and fair-play tiebreakers (rare edge cases requiring more granular data than we scrape) are not
+// modelled. Only returns a table for groups whose all 6 round-robin results are in.
+function computeGroupStandings(resultsByGroup) {
+  const standings = {};
+  Object.entries(resultsByGroup).forEach(([group, results]) => {
+    if (!results || results.length < 6) return; // group not finished yet
+    const teams = {};
+    results.forEach(r => {
+      [r.code1, r.code2].forEach(code => {
+        if (!teams[code]) teams[code] = { code, pld: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 };
+      });
+    });
+    results.forEach(r => {
+      const t1 = teams[r.code1], t2 = teams[r.code2];
+      t1.pld++; t2.pld++;
+      t1.gf += r.h; t1.ga += r.a;
+      t2.gf += r.a; t2.ga += r.h;
+      if (r.h > r.a) { t1.w++; t2.l++; }
+      else if (r.h < r.a) { t2.w++; t1.l++; }
+      else { t1.d++; t2.d++; }
+    });
+    const table = Object.values(teams).map(t => ({ ...t, gd: t.gf - t.ga, pts: t.w * 3 + t.d }));
+    table.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || a.code.localeCompare(b.code));
+    standings[group] = table;
+  });
+  return standings;
+}
+
+// Finds the given team code's row + qualification status within whichever group's table it appears
+// in. Returns null if that team's group hasn't finished yet (or the code is unrecognised).
+function teamGroupStatus(code, groupStandings) {
+  for (const table of Object.values(groupStandings)) {
+    const idx = table.findIndex(t => t.code === code);
+    if (idx !== -1) return { qualified: idx < 2, rank: idx + 1, row: table[idx] };
+  }
+  return null;
+}
+
+// Tournament-wide "most/fewest goals scored in the group stage" -- only meaningful once every group
+// has finished, otherwise an early-finishing group's high scorer would look like the leader purely
+// because other groups haven't caught up yet.
+function groupStageGoalsLeaders(groupStandings) {
+  if (Object.keys(groupStandings).length < WIKI_GROUPS.length) return null;
+  const allRows = Object.values(groupStandings).flat();
+  if (!allRows.length) return null;
+  const most = allRows.slice().sort((a, b) => b.gf - a.gf)[0];
+  const fewest = allRows.slice().sort((a, b) => a.gf - b.gf)[0];
+  return { most, fewest };
+}
+
+// Resolves a free-text team name (possibly mis-typed/accented) to its canonical FIFA code, falling
+// back to fuzzy matching against every known team name when there's no exact TEAM_CODE hit.
+function codeForTeamName(name) {
+  if (TEAM_CODE[name]) return TEAM_CODE[name];
+  for (const key of Object.keys(TEAM_CODE)) {
+    if (namesMatch(name, key)) return TEAM_CODE[key];
+  }
+  return null;
 }
 
 async function fetchLiveScores() {
   setFetchButtonsDisabled(true);
   setFetchStatus("Fetching from Wikipedia…");
 
-  const { allResults, failedGroups } = await fetchAllGroups();
+  const { allResults, resultsByGroup, failedGroups } = await fetchAllGroups();
+
+  // Merge fresh group results into tournamentFacts -- only overwrite groups that loaded
+  // successfully this round, so a transient failure never wipes out previously-known standings.
+  WIKI_GROUPS.forEach(g => {
+    if (resultsByGroup[g]) tournamentFacts.resultsByGroup[g] = resultsByGroup[g];
+  });
+
+  // Same one-batched-request rule as the group pages: awards + red cards in a single call. A
+  // failure here (null) just means this round's bonus/deduction facts stay whatever they were
+  // before -- never wiped, never silently wrong.
+  const facts = await fetchTournamentFacts();
+  if (facts) {
+    tournamentFacts.awards = facts.awards || tournamentFacts.awards;
+    tournamentFacts.redCards = facts.redCards.length ? facts.redCards : tournamentFacts.redCards;
+  }
+  tournamentFacts.lastFetched = new Date().toISOString();
+  saveTournamentFacts(tournamentFacts);
 
   // Wikipedia is treated as the source of truth: any fixture it has a confirmed score for gets set
   // to match, whether that fixture was blank or already had a (possibly wrong) value. Fixtures
@@ -1517,18 +2187,21 @@ async function fetchLiveScores() {
   saveOverrides(overrides);
   setFetchButtonsDisabled(false);
 
+  const factsNote = facts ? " Bonus/deduction facts refreshed too." : " (Couldn't refresh bonus/deduction facts this time — kept previous values.)";
+
   if (failedGroups.length === WIKI_GROUPS.length) {
     setFetchStatus("Couldn't reach Wikipedia — check your internet connection and try again.");
   } else if (added === 0 && corrected === 0) {
-    setFetchStatus(failedGroups.length
+    setFetchStatus((failedGroups.length
       ? `No changes (groups ${failedGroups.join(", ")} failed to load — try again).`
-      : "No changes — everything matches the official results.");
+      : "No changes — everything matches the official results.") + factsNote);
   } else {
     const parts = [];
     if (added) parts.push(`added ${added} new result${added === 1 ? "" : "s"} (${addedDesc.join(", ")})`);
     if (corrected) parts.push(`corrected ${corrected} ${corrected === 1 ? "entry" : "entries"} that didn't match the official result (${correctedDesc.join(", ")})`);
     setFetchStatus(parts.join("; ") + "." +
-      (failedGroups.length ? ` (Groups ${failedGroups.join(", ")} failed to load — try again to pick those up.)` : ""));
+      (failedGroups.length ? ` (Groups ${failedGroups.join(", ")} failed to load — try again to pick those up.)` : "") +
+      factsNote);
   }
   renderAll();
 }

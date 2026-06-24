@@ -425,6 +425,7 @@
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.3; transform: scale(0.75); }
   }
+  .match-time { font-size: 10px; color: #aaa; margin-left: 4px; font-variant-numeric: tabular-nums; }
   .clear-live-btn, .reset-live-btn {
     border: 1px solid var(--border); background: transparent; border-radius: 4px;
     cursor: pointer; font-size: 10px; padding: 2px 5px; color: #999;
@@ -1752,8 +1753,9 @@ function renderActualCell(mwIndex, fixIndex, hVal, aVal) {
 
   // Live feed active, not manually overridden, fixture not yet confirmed — show locked live score
   if (live && !isManual && !confirmed) {
+    const timeLabel = live.status === 'PAUSED' ? 'HT' : live.minute != null ? live.minute + "'" : '';
     return `<div class="actual-wrap" data-actual-wrap="${key}">
-      <span class="live-score-badge"><span class="live-dot"></span>${live.h}–${live.a}</span>
+      <span class="live-score-badge"><span class="live-dot"></span>${live.h}–${live.a}${timeLabel ? `<span class="match-time">${timeLabel}</span>` : ''}</span>
       <button class="clear-live-btn" data-key="${key}" title="Clear live score and enter your own">✕</button>
     </div>`;
   }
@@ -2996,6 +2998,8 @@ async function pollLiveScores() {
     (data.matches || []).forEach(match => {
       const h = match.score.fullTime.home ?? 0;
       const a = match.score.fullTime.away ?? 0;
+      const minute = match.minute;
+      const status = match.status;
       const homeName = FD_TEAM_MAP[match.homeTeam.name] || match.homeTeam.name;
       const awayName = FD_TEAM_MAP[match.awayTeam.name] || match.awayTeam.name;
       DATA.matchweeks.forEach((mw, mwIndex) => {
@@ -3004,8 +3008,9 @@ async function pollLiveScores() {
             const key = fixtureKey(mwIndex, fixIndex);
             activeKeys.add(key);
             if (!isFixtureConfirmed(mwIndex, fixIndex, fixture)) {
-              if (!liveData[key] || liveData[key].h !== h || liveData[key].a !== a) {
-                liveData[key] = { h, a };
+              const prev = liveData[key];
+              if (!prev || prev.h !== h || prev.a !== a || prev.minute !== minute || prev.status !== status) {
+                liveData[key] = { h, a, minute, status };
                 updated = true;
                 saveLiveData();
               }

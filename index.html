@@ -1753,7 +1753,9 @@ function renderActualCell(mwIndex, fixIndex, hVal, aVal) {
 
   // Live feed active, not manually overridden, fixture not yet confirmed — show locked live score
   if (live && !isManual && !confirmed) {
-    const timeLabel = live.status === 'PAUSED' ? 'HT' : live.minute != null ? live.minute + "'" : '';
+    const elapsedMin = (Date.now() - new Date(fixture.kickoff).getTime()) / 60000;
+    const timeLabel = live.minute != null ? live.minute + "'"
+      : (live.status === 'PAUSED' && elapsedMin >= 44 && elapsedMin <= 72) ? 'HT' : '';
     return `<div class="actual-wrap" data-actual-wrap="${key}">
       <span class="live-score-badge"><span class="live-dot"></span>${live.h}–${live.a}${timeLabel ? `<span class="match-time">${timeLabel}</span>` : ''}</span>
       <button class="clear-live-btn" data-key="${key}" title="Clear live score and enter your own">✕</button>

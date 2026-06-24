@@ -1401,10 +1401,13 @@ const NEAR_BOTTOM_THRESHOLD = 20; // roughly one confident pick's worth of swing
 function buildWhatIfText(targets) {
   if (!targets || !targets.length) return "";
   // Only show the blurb once at least one concurrent fixture has a tentative unconfirmed score
+  // (either a manual override or an active live score from the CF worker)
   const activeTargets = targets.filter(t => {
-    const ov = overrides[fixtureKey(t.mwIndex, t.fixIndex)];
-    return !!ov && ov.h !== "" && ov.a !== "" && ov.h !== undefined && ov.a !== undefined
-      && !isFixtureConfirmed(t.mwIndex, t.fixIndex, t.fixture);
+    const key = fixtureKey(t.mwIndex, t.fixIndex);
+    if (isFixtureConfirmed(t.mwIndex, t.fixIndex, t.fixture)) return false;
+    const ov = overrides[key];
+    if (ov && ov.h !== "" && ov.a !== "" && ov.h !== undefined && ov.a !== undefined) return true;
+    return !!(liveData[key] && !liveManualOverrideKeys.has(key));
   });
   if (!activeTargets.length) return "";
   // Baseline excludes ALL concurrent fixtures so the "before" is clean regardless of how many
@@ -1430,11 +1433,18 @@ function buildWhatIfText(targets) {
   // getExactBonus sums the double-points bonus across all fixtures where the player got it exactly
   // right, so if someone nailed both in a simultaneous pair they get the full combined credit.
   const getExactBonus = (p) => activeTargets.reduce((sum, t) => {
-    const ov = overrides[fixtureKey(t.mwIndex, t.fixIndex)];
-    if (!ov || ov.h === "" || ov.a === "" || ov.h === undefined || ov.a === undefined) return sum;
-    const tentative = { h: Number(ov.h), a: Number(ov.a) };
+    const key = fixtureKey(t.mwIndex, t.fixIndex);
+    const ov = overrides[key];
+    let tentativeH, tentativeA;
+    if (ov && ov.h !== "" && ov.a !== "" && ov.h !== undefined && ov.a !== undefined
+        && !isFixtureConfirmed(t.mwIndex, t.fixIndex, t.fixture)) {
+      tentativeH = Number(ov.h); tentativeA = Number(ov.a);
+    } else if (liveData[key] && !liveManualOverrideKeys.has(key)) {
+      tentativeH = liveData[key].h; tentativeA = liveData[key].a;
+    }
+    if (tentativeH === undefined) return sum;
     const pred = t.fixture.predictions[p];
-    return (pred && pred.h === tentative.h && pred.a === tentative.a) ? sum + pred.stake * 2 : sum;
+    return (pred && pred.h === tentativeH && pred.a === tentativeA) ? sum + pred.stake * 2 : sum;
   }, 0);
   const isExact = (p) => getExactBonus(p) > 0;
   const exactCredited = new Set();
@@ -2097,8 +2107,8 @@ function buildLastFixtureText() {
 
 function renderShakerCard() {
   const el = document.getElementById("shaker-card");
-  // Portrait only: hide while matches are live, reappear once confirmed
-  if (pinnedNextKickoff && window.matchMedia("(orientation: portrait)").matches) {
+  // Hide while matches are live — M&S shows last results, which is less relevant mid-match
+  if (pinnedNextKickoff) {
     const now = Date.now();
     const isLive = allFixturesChronological().some(f =>
       f.fixture.kickoff === pinnedNextKickoff &&
@@ -2926,9 +2936,12 @@ async function fetchLiveScores() {
       const a = match.code1 === homeCode ? match.a : match.h;
       if (hasExisting && Number(existingH) === h && Number(existingA) === a) return; // already correct
 
+      // Don't confirm from Wikipedia while the CF worker is actively tracking this match —
+      // Wikipedia also shows live scores mid-match. The live feed will clear liveData[key]
+      // once the match ends, at which point fetchLiveScores can confirm normally.
+      if (liveData[key]) return;
       overrides[key] = { h: String(h), a: String(a), source: "fetch" };
       unlockedKeys.delete(key); // re-lock with the corrected value if it was open for editing
-      if (liveData[key]) { delete liveData[key]; saveLiveData(); } // confirmed — retire from live feed
       if (hasExisting) {
         corrected++;
         correctedDesc.push(`${fixture.home} ${h}-${a} ${fixture.away} (was ${existingH}-${existingA})`);
@@ -2979,6 +2992,7 @@ async function pollLiveScores() {
     if (!res.ok) return;
     const data = await res.json();
     let updated = false;
+    const activeKeys = new Set();
     (data.matches || []).forEach(match => {
       const h = match.score.fullTime.home ?? 0;
       const a = match.score.fullTime.away ?? 0;
@@ -2988,6 +3002,7 @@ async function pollLiveScores() {
         mw.fixtures.forEach((fixture, fixIndex) => {
           if (fixture.home === homeName && fixture.away === awayName) {
             const key = fixtureKey(mwIndex, fixIndex);
+            activeKeys.add(key);
             if (!isFixtureConfirmed(mwIndex, fixIndex, fixture)) {
               if (!liveData[key] || liveData[key].h !== h || liveData[key].a !== a) {
                 liveData[key] = { h, a };
@@ -2998,6 +3013,20 @@ async function pollLiveScores() {
           }
         });
       });
+    });
+    // Retire liveData entries the CF worker is no longer returning — the match has ended.
+    // Only after 165 min since kickoff (90 reg + 30 ET + 30 penalties + buffer) so a brief
+    // API gap mid-match doesn't falsely clear a live score.
+    Object.keys(liveData).forEach(k => {
+      if (!activeKeys.has(k)) {
+        const parts = k.split('_');
+        const fix = DATA.matchweeks[Number(parts[0])]?.fixtures[Number(parts[1])];
+        if (fix && now - new Date(fix.kickoff).getTime() > 165 * 60 * 1000) {
+          delete liveData[k];
+          saveLiveData();
+          updated = true;
+        }
+      }
     });
     // Only re-render if data changed and nobody is mid-typing in a score input
     if (updated && !document.querySelector(".score-input:focus")) {

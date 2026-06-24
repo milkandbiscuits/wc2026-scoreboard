@@ -263,6 +263,7 @@
   .pts-line.wrong { color: var(--red); }
   .pts-line.pending { color: #888; font-weight: 500; }
   .pts-line.exact { color: #9a6b00; }
+  .exact-star { font-size: 16px; line-height: 1; vertical-align: middle; }
   .mw-leader-box {
     display: inline-block;
     background: var(--green);
@@ -505,13 +506,16 @@
     .col-mw-past { display: none; }
     .col-correct { display: none; }
     .mw-stat-badge { display: none; }
-    .rank-move { font-size: 12px; width: 26px; }
+    .rank-move { font-size: 10px; width: 26px; }
     table.leaderboard th, table.leaderboard td { padding: 6px 8px; }
     table.leaderboard td.col-player-lb { padding-left: 32px; }
   }
   #next-fixture-card .table-scroll { padding-bottom: 0; }
   @media (max-width: 1024px) and (orientation: landscape) {
     #shaker-card .card-title .meta { font-size: 15px; }
+    #shaker-card .whatif-note,
+    #next-fixture-card .whatif-note,
+    #next-fixture-card .fixture-note { font-size: 11px; font-weight: 500; }
   }
   /* iOS/Android auto-zoom the whole page on focus for any text input under 16px font-size --
      bump it just for touch devices so entering a score doesn't yank the viewport in. Scoped to
@@ -1737,7 +1741,7 @@ function renderFixtureRow(mwIndex, fixIndex, fixture) {
       ptsHtml = `<div class="pts-line pending">(${pred.stake})</div>`;
     } else if (g.exact) {
       cls = "exact";
-      ptsHtml = `<div class="pts-line exact">+${g.pts} ✦</div>`;
+      ptsHtml = `<div class="pts-line exact">+${g.pts} <span class="exact-star">✦</span></div>`;
     } else if (g.correct) {
       cls = "correct";
       ptsHtml = `<div class="pts-line correct">+${g.pts}</div>`;

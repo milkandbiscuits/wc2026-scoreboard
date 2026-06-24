@@ -647,7 +647,9 @@ function saveOverrides(overrides) {
 }
 let overrides = loadOverrides(); // { "mwIndex_fixtureIndex": {h, a} }
 let unlockedKeys = new Set(); // fixtures temporarily reopened for editing this session (not persisted)
-let liveData = {}; // key → { h, a } from football-data.org Worker, updated every 10s during LIVE matches
+function loadLiveData() { try { return JSON.parse(localStorage.getItem("liveData") || "{}"); } catch { return {}; } }
+function saveLiveData() { try { localStorage.setItem("liveData", JSON.stringify(liveData)); } catch {} }
+let liveData = loadLiveData(); // key → { h, a } — persists across page refreshes via localStorage
 let liveManualOverrideKeys = new Set(); // keys where user chose "Clear & enter own" instead of live feed
 const LIVE_WORKER_URL = "https://wc-live-scores.matt-969.workers.dev/";
 const FD_TEAM_MAP = {
@@ -2926,6 +2928,7 @@ async function fetchLiveScores() {
 
       overrides[key] = { h: String(h), a: String(a), source: "fetch" };
       unlockedKeys.delete(key); // re-lock with the corrected value if it was open for editing
+      if (liveData[key]) { delete liveData[key]; saveLiveData(); } // confirmed — retire from live feed
       if (hasExisting) {
         corrected++;
         correctedDesc.push(`${fixture.home} ${h}-${a} ${fixture.away} (was ${existingH}-${existingA})`);
@@ -2989,6 +2992,7 @@ async function pollLiveScores() {
               if (!liveData[key] || liveData[key].h !== h || liveData[key].a !== a) {
                 liveData[key] = { h, a };
                 updated = true;
+                saveLiveData();
               }
             }
           }
@@ -3137,6 +3141,7 @@ function refreshFixtureTitleLabel() {
     const meta = el.querySelector('.meta');
     el.innerHTML = label + (meta ? meta.outerHTML : '');
   });
+  renderShakerCard(); // keep M&S in sync — hides in portrait the moment LIVE kicks in
 }
 setInterval(refreshFixtureTitleLabel, 30000);
 pollLiveScores(); // immediate first check on page load

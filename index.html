@@ -1946,7 +1946,7 @@ function fixtureGuidanceHtml(targets) {
     : null;
   if (text) return `<p class="whatif-note">${text}</p>` + (legend || "");
   const plural = targets && targets.length > 1;
-  return legend || `<p class="fixture-note">Enter live score${plural ? "s" : ""} here to update leaderboard</p>`;
+  return legend || `<p class="fixture-note">Enter score${plural ? "s" : ""} here to update leaderboard</p>`;
 }
 
 // Portrait-mobile-only condensed stand-in for the Next Fixture card above -- same target fixture,
@@ -2096,6 +2096,16 @@ function buildLastFixtureText() {
 
 function renderShakerCard() {
   const el = document.getElementById("shaker-card");
+  // Hide while matches are live — only show between matches
+  if (pinnedNextKickoff) {
+    const now = Date.now();
+    const isLive = allFixturesChronological().some(f =>
+      f.fixture.kickoff === pinnedNextKickoff &&
+      !isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture) &&
+      new Date(f.fixture.kickoff).getTime() <= now
+    );
+    if (isLive) { el.style.display = "none"; return; }
+  }
   const result = buildLastFixtureText();
   if (!result) { el.style.display = "none"; return; }
   el.style.display = "";

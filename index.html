@@ -411,6 +411,27 @@
     border-radius: 4px;
   }
   .clear-fixture-btn:hover { color: var(--red); background: var(--red-bg); }
+  .live-score-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-weight: 700; font-size: 14px; color: #222;
+  }
+  .live-dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #e05555;
+    vertical-align: middle; flex-shrink: 0;
+    animation: livePulse 1.4s ease-in-out infinite;
+  }
+  .card-title .live-dot { width: 10px; height: 10px; }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.3; transform: scale(0.75); }
+  }
+  .clear-live-btn, .reset-live-btn {
+    border: 1px solid var(--border); background: transparent; border-radius: 4px;
+    cursor: pointer; font-size: 10px; padding: 2px 5px; color: #999;
+    line-height: 1; margin-left: 3px;
+  }
+  .clear-live-btn:hover { color: #e05555; border-color: #e05555; }
+  .reset-live-btn:hover { color: #22a855; border-color: #22a855; }
   .compact-fixture-banner { display: none; }
   .compact-fixture-row {
     display: flex;
@@ -423,9 +444,10 @@
   #compact-fixture-banner .fixture-note { text-align: right; }
   .fixture-note {
     margin: 0;
-    padding: 0 18px 14px;
+    padding: 10px 18px 14px;
     font-size: 12.5px;
     color: #777;
+    border-top: 1px solid var(--border);
   }
   .bracket-extra { padding: 12px 18px; font-size: 12.5px; }
   .bracket-note { margin: 0 0 8px; color: #777; font-size: 12.5px; }
@@ -510,6 +532,7 @@
     .rank-move { font-size: 10px; width: 26px; }
     table.leaderboard th, table.leaderboard td { padding: 6px 8px; }
     table.leaderboard td.col-player-lb { padding-left: 38px; }
+    #compact-fixture-banner .fixture-note { font-size: 10px; }
   }
   #next-fixture-card .table-scroll { padding-bottom: 0; }
   @media (max-width: 1024px) and (orientation: landscape) {
@@ -625,6 +648,16 @@ function saveOverrides(overrides) {
 }
 let overrides = loadOverrides(); // { "mwIndex_fixtureIndex": {h, a} }
 let unlockedKeys = new Set(); // fixtures temporarily reopened for editing this session (not persisted)
+let liveData = {}; // key → { h, a } from football-data.org Worker, updated every 10s during LIVE matches
+let liveManualOverrideKeys = new Set(); // keys where user chose "Clear & enter own" instead of live feed
+const LIVE_WORKER_URL = "https://wc-live-scores.matt-969.workers.dev/";
+const FD_TEAM_MAP = {
+  "Bosnia-Herzegovina": "Bosnia and Herzegovina",
+  "Korea Republic":     "South Korea",
+  "IR Iran":            "Iran",
+  "USA":                "United States",
+  "Cabo Verde":         "Cabo Verde",
+};
 
 const TOURNAMENT_FACTS_KEY = "wc2026_tournament_facts_v1";
 // Ground truth for the bonus/deduction rules, auto-pulled from Wikipedia the same way live scores
@@ -667,6 +700,9 @@ function getActual(mwIndex, fixIndex, fixture) {
   }
   if (overrides[key] && (overrides[key].h === "" || overrides[key].a === "")) {
     return null;
+  }
+  if (liveData[key] && !liveManualOverrideKeys.has(key)) {
+    return { h: liveData[key].h, a: liveData[key].a };
   }
   return fixture.actual; // fall back to source data
 }
@@ -1698,12 +1734,33 @@ function flashSaveStatus() {
 
 function renderActualCell(mwIndex, fixIndex, hVal, aVal) {
   const key = fixtureKey(mwIndex, fixIndex);
+  const fixture = DATA.matchweeks[mwIndex].fixtures[fixIndex];
+  const confirmed = isFixtureConfirmed(mwIndex, fixIndex, fixture);
+  const live = liveData[key];
+  const isManual = liveManualOverrideKeys.has(key);
+
+  // Live feed active, not manually overridden, fixture not yet confirmed — show locked live score
+  if (live && !isManual && !confirmed) {
+    return `<div class="actual-wrap" data-actual-wrap="${key}">
+      <span class="live-score-badge"><span class="live-dot"></span>${live.h}–${live.a}</span>
+      <button class="clear-live-btn" data-key="${key}" title="Clear live score and enter your own">✕</button>
+    </div>`;
+  }
+
+  // User cleared the live feed — show editable inputs with Reset button
+  if (live && isManual && !confirmed) {
+    return `<div class="actual-wrap" data-actual-wrap="${key}">
+      <input type="number" min="0" max="20" class="score-input" data-mw="${mwIndex}" data-fix="${fixIndex}" data-side="h" value="${hVal}">
+      <span class="score-sep">-</span>
+      <input type="number" min="0" max="20" class="score-input" data-mw="${mwIndex}" data-fix="${fixIndex}" data-side="a" value="${aVal}">
+      <button class="reset-live-btn" data-key="${key}" title="Reset to live score">↺</button>
+    </div>`;
+  }
+
+  // Standard path — no live feed, or fixture confirmed
   const hasValue = hVal !== "" && aVal !== "";
   const locked = hasValue && !unlockedKeys.has(key);
-  // Only safe to offer a one-click wipe while the fixture is still "open" -- once Wikipedia (or
-  // baked-in data) has confirmed it there's a real result that clearing could lose.
-  const fixture = DATA.matchweeks[mwIndex].fixtures[fixIndex];
-  const showClear = hasValue && !isFixtureConfirmed(mwIndex, fixIndex, fixture);
+  const showClear = hasValue && !confirmed;
   const clearBtn = showClear
     ? `<button class="clear-fixture-btn" data-key="${key}" title="Clear this score">×</button>`
     : "";
@@ -1829,7 +1886,7 @@ function fixtureTitleLabel(targets) {
     Date.now() >= new Date(t.fixture.kickoff).getTime() &&
     !isFixtureConfirmed(t.mwIndex, t.fixIndex, t.fixture)
   );
-  if (inPlay) return `<span><span style="color:#e05555;">LIVE</span> ${plural ? "Fixtures" : "Fixture"}</span>`;
+  if (inPlay) return `<span><span class="live-dot" style="margin-right:5px;"></span><span style="color:#e05555;">LIVE</span> ${plural ? "Fixtures" : "Fixture"}</span>`;
   return plural ? "Next Fixtures" : "Next Fixture";
 }
 
@@ -1882,10 +1939,14 @@ function renderNextFixtureCard() {
 // other -- once there's something to say about the score, the "how to" hint isn't needed anymore.
 // Shared by both the full Next Fixture card and the compact portrait banner so they stay in sync.
 function fixtureGuidanceHtml(targets) {
+  const hasLive = targets && targets.some(t => liveData[fixtureKey(t.mwIndex, t.fixIndex)]);
   const text = buildWhatIfText(targets);
-  if (text) return `<p class="whatif-note">${text}</p>`;
+  const legend = hasLive
+    ? `<p class="fixture-note" style="text-align:left;"><span class="live-dot" style="margin-right:4px;"></span>Live score auto-updating &nbsp;·&nbsp; <strong>✕</strong> enter your own &nbsp;·&nbsp; <strong>↺</strong> reset to live</p>`
+    : null;
+  if (text) return `<p class="whatif-note">${text}</p>` + (legend || "");
   const plural = targets && targets.length > 1;
-  return `<p class="fixture-note">Enter live score${plural ? "s" : ""} here to update leaderboard</p>`;
+  return legend || `<p class="fixture-note">Enter live score${plural ? "s" : ""} here to update leaderboard</p>`;
 }
 
 // Portrait-mobile-only condensed stand-in for the Next Fixture card above -- same target fixture,
@@ -2341,6 +2402,21 @@ function attachInputListeners() {
       const key = btn.dataset.key;
       delete overrides[key];
       unlockedKeys.delete(key);
+      saveOverrides(overrides);
+      renderAll();
+    });
+  });
+  document.querySelectorAll(".clear-live-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      liveManualOverrideKeys.add(btn.dataset.key);
+      renderAll();
+    });
+  });
+  document.querySelectorAll(".reset-live-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.key;
+      liveManualOverrideKeys.delete(key);
+      delete overrides[key];
       saveOverrides(overrides);
       renderAll();
     });
@@ -2877,6 +2953,48 @@ async function fetchLiveScores() {
 
 document.querySelectorAll(".js-fetch-btn").forEach(btn => btn.addEventListener("click", fetchLiveScores));
 
+async function pollLiveScores() {
+  // Only hit the Worker if there are fixtures currently in-play (kicked off, not yet confirmed)
+  const now = Date.now();
+  const hasLive = allFixturesChronological().some(f => {
+    return new Date(f.fixture.kickoff).getTime() <= now &&
+           !isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture);
+  });
+  if (!hasLive) return;
+
+  try {
+    const res = await fetch(LIVE_WORKER_URL);
+    if (!res.ok) return;
+    const data = await res.json();
+    let updated = false;
+    (data.matches || []).forEach(match => {
+      const h = match.score.fullTime.home ?? 0;
+      const a = match.score.fullTime.away ?? 0;
+      const homeName = FD_TEAM_MAP[match.homeTeam.name] || match.homeTeam.name;
+      const awayName = FD_TEAM_MAP[match.awayTeam.name] || match.awayTeam.name;
+      DATA.matchweeks.forEach((mw, mwIndex) => {
+        mw.fixtures.forEach((fixture, fixIndex) => {
+          if (fixture.home === homeName && fixture.away === awayName) {
+            const key = fixtureKey(mwIndex, fixIndex);
+            if (!isFixtureConfirmed(mwIndex, fixIndex, fixture)) {
+              if (!liveData[key] || liveData[key].h !== h || liveData[key].a !== a) {
+                liveData[key] = { h, a };
+                updated = true;
+              }
+            }
+          }
+        });
+      });
+    });
+    // Only re-render if data changed and nobody is mid-typing in a score input
+    if (updated && !document.querySelector(".score-input:focus")) {
+      renderAll();
+    }
+  } catch (e) {
+    // Silent fail — keep last known live score on screen
+  }
+}
+
 let activeTab = DATA.matchweeks.length - 1; // default to the latest matchweek, not the first
 
 // renderPanels() rebuilds every .table-scroll container from scratch via innerHTML, which would
@@ -3012,6 +3130,8 @@ function refreshFixtureTitleLabel() {
   });
 }
 setInterval(refreshFixtureTitleLabel, 30000);
+pollLiveScores(); // immediate first check on page load
+setInterval(pollLiveScores, 5000);
 </script>
 
 </body>

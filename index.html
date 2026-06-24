@@ -524,7 +524,6 @@
   @media (max-width: 700px) and (orientation: portrait) {
     .rotate-banner { display: flex; }
     .next-fixture-card { display: none; }
-    #shaker-card { display: none; }
     .compact-fixture-banner { display: block; }
     .col-mw-past { display: none; }
     .col-correct { display: none; }
@@ -2096,8 +2095,8 @@ function buildLastFixtureText() {
 
 function renderShakerCard() {
   const el = document.getElementById("shaker-card");
-  // Hide while matches are live — only show between matches
-  if (pinnedNextKickoff) {
+  // Portrait only: hide while matches are live, reappear once confirmed
+  if (pinnedNextKickoff && window.matchMedia("(orientation: portrait)").matches) {
     const now = Date.now();
     const isLive = allFixturesChronological().some(f =>
       f.fixture.kickoff === pinnedNextKickoff &&

@@ -2564,7 +2564,7 @@ function attachInputListeners() {
       renderNextFixtureCard();
       renderShakerCard();
       renderPanels();
-      const newAnchor = document.querySelector(`[data-fix-key="${key}"]`);
+      const newAnchor = document.querySelector(`#panels [data-fix-key="${key}"]`);
       const newScrollY = newAnchor
         ? (newAnchor.getBoundingClientRect().top + window.scrollY) - viewportOffset
         : s.windowScrollY;

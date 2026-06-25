@@ -34,6 +34,7 @@
     padding: 0 0 60px 0;
     background: #f5f6f8;
     color: #1a1a1a;
+    overflow-anchor: none;
   }
   header.page-header {
     background: var(--header-bg);
@@ -2554,7 +2555,10 @@ function attachInputListeners() {
       unlockedKeys.delete(key);
       // Anchor the viewport to the clicked row so page-height changes (e.g. what-if blurb
       // appearing) don't cause the table to jump away from the user's eye.
-      const anchorTop = cell.getBoundingClientRect().top;
+      // Uses absolute doc coords (top + scrollY) so it's immune to whatever the browser
+      // did to window.scrollY during the renders (overflow-anchor: none on body removes
+      // the browser's own scroll-anchoring, which was fighting this correction).
+      const viewportOffset = cell.getBoundingClientRect().top;
       const s = captureScrollState();
       renderLeaderboard();
       renderNextFixtureCard();
@@ -2562,7 +2566,7 @@ function attachInputListeners() {
       renderPanels();
       const newAnchor = document.querySelector(`[data-fix-key="${key}"]`);
       const newScrollY = newAnchor
-        ? s.windowScrollY + (newAnchor.getBoundingClientRect().top - anchorTop)
+        ? (newAnchor.getBoundingClientRect().top + window.scrollY) - viewportOffset
         : s.windowScrollY;
       restoreScrollState(s, newScrollY);
     });

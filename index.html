@@ -31,7 +31,7 @@
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     margin: 0;
-    padding: 0 0 60px 0;
+    padding: 0 0 24px 0;
     background: #f5f6f8;
     color: #1a1a1a;
   }
@@ -431,7 +431,7 @@
     50% { opacity: 0.3; transform: scale(0.75); }
   }
   .match-time { font-size: 10px; color: #aaa; margin-left: 4px; font-variant-numeric: tabular-nums; }
-  #presence-wrap { text-align: center; padding: 10px 0 24px; }
+  #presence-wrap { text-align: center; padding: 10px 0 24px; display: none; }
   #presence-indicator { font-size: 11px; color: #666; display: none; }
   .presence-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4caf77; margin-right: 5px; vertical-align: middle; animation: livePulse 2s ease-in-out infinite; }
   .clear-live-btn, .reset-live-btn {
@@ -1874,7 +1874,11 @@ function renderFixtureRow(mwIndex, fixIndex, fixture) {
 }
 
 function renderMatchweekTable(mw, mwIndex) {
-  const rows = mw.fixtures.map((fixture, fixIndex) => renderFixtureRow(mwIndex, fixIndex, fixture)).join("");
+  const rows = mw.fixtures
+    .map((fixture, fixIndex) => ({ fixture, fixIndex }))
+    .sort((a, b) => new Date(a.fixture.kickoff) - new Date(b.fixture.kickoff))
+    .map(({ fixture, fixIndex }) => renderFixtureRow(mwIndex, fixIndex, fixture))
+    .join("");
 
   return `<div class="table-scroll">
     <table class="games">
@@ -3340,11 +3344,13 @@ setInterval(pollLiveScores, 5000);
       const r = await fetch(`${PRESENCE_URL}?sid=${sid}`);
       if (!r.ok) return;
       const { count } = await r.json();
+      const wrap = document.getElementById('presence-wrap');
       const indicator = document.getElementById('presence-indicator');
       const countEl = document.getElementById('presence-count');
-      if (!indicator || !countEl) return;
+      if (!wrap || !indicator || !countEl) return;
       countEl.textContent = count;
       indicator.style.display = count > 0 ? 'inline' : 'none';
+      wrap.style.display = count > 0 ? '' : 'none';
     } catch (e) { /* silent — presence is decorative, never block on failure */ }
   }
 

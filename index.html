@@ -34,7 +34,6 @@
     padding: 0 0 60px 0;
     background: #f5f6f8;
     color: #1a1a1a;
-    overflow-anchor: none;
   }
   header.page-header {
     background: var(--header-bg);
@@ -2553,22 +2552,14 @@ function attachInputListeners() {
       saveOverrides(overrides);
       flashSaveStatus();
       unlockedKeys.delete(key);
-      // Anchor the viewport to the clicked row so page-height changes (e.g. what-if blurb
-      // appearing) don't cause the table to jump away from the user's eye.
-      // Uses absolute doc coords (top + scrollY) so it's immune to whatever the browser
-      // did to window.scrollY during the renders (overflow-anchor: none on body removes
-      // the browser's own scroll-anchoring, which was fighting this correction).
-      const viewportOffset = cell.getBoundingClientRect().top;
+      // Render then restore only table scrollLeft — browser's native scroll anchoring
+      // (overflow-anchor: auto) keeps window.scrollY stable through layout shifts.
       const s = captureScrollState();
       renderLeaderboard();
       renderNextFixtureCard();
       renderShakerCard();
       renderPanels();
-      const newAnchor = document.querySelector(`#panels [data-fix-key="${key}"]`);
-      const newScrollY = newAnchor
-        ? (newAnchor.getBoundingClientRect().top + window.scrollY) - viewportOffset
-        : s.windowScrollY;
-      restoreScrollState(s, newScrollY);
+      restoreScrollState(s);
     });
   });
   document.querySelectorAll(".clear-live-btn").forEach(btn => {
@@ -3200,7 +3191,7 @@ function captureScrollState() {
   if (active) state.scrolls.active = { top: active.scrollTop, left: active.scrollLeft };
   return state;
 }
-function restoreScrollState(state, overrideScrollY) {
+function restoreScrollState(state) {
   const nextFix = document.querySelector("#next-fixture-card .table-scroll");
   if (nextFix && state.scrolls.nextFixture) {
     nextFix.scrollTop = state.scrolls.nextFixture.top;
@@ -3211,7 +3202,8 @@ function restoreScrollState(state, overrideScrollY) {
     active.scrollTop = state.scrolls.active.top;
     active.scrollLeft = state.scrolls.active.left;
   }
-  window.scrollTo(window.scrollX, overrideScrollY !== undefined ? overrideScrollY : state.windowScrollY);
+  // window.scrollY intentionally not set — browser's native scroll anchoring keeps
+  // visible content stable during layout shifts (shaker card appearing etc.)
 }
 
 function renderAll() {

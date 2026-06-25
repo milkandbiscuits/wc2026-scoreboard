@@ -3350,7 +3350,7 @@ setInterval(pollLiveScores, 5000);
       if (!wrap || !indicator || !countEl) return;
       countEl.textContent = count;
       indicator.style.display = count > 0 ? 'inline' : 'none';
-      wrap.style.display = count > 0 ? '' : 'none';
+      wrap.style.display = count > 0 ? 'block' : 'none';
     } catch (e) { /* silent — presence is decorative, never block on failure */ }
   }
 

@@ -459,6 +459,8 @@
     border-top: 1px solid var(--border);
   }
   .bracket-extra { padding: 12px 18px; font-size: 12.5px; }
+  @media (orientation: portrait)  { .guidance-landscape { display: none; } }
+  @media (orientation: landscape) { .guidance-portrait  { display: none; } }
   .bracket-note { margin: 0 0 8px; color: #777; font-size: 12.5px; }
   .trump-field { display: block; margin-top: 10px; color: #777; }
   .trump-field input { margin-left: 6px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 12.5px; }
@@ -2003,7 +2005,7 @@ function fixtureGuidanceHtml(targets) {
     : null;
   if (text) return `<p class="whatif-note">${text}</p>` + (legend || "");
   const plural = targets && targets.length > 1;
-  return legend || `<p class="fixture-note">Enter score${plural ? "s" : ""} here to update leaderboard</p>`;
+  return legend || `<p class="fixture-note"><span class="guidance-portrait">Enter score${plural ? "s" : ""} here to update leaderboard</span><span class="guidance-landscape">Select any player score, or enter manually to update leaderboard</span></p>`;
 }
 
 // Portrait-mobile-only condensed stand-in for the Next Fixture card above -- same target fixture,

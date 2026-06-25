@@ -2120,12 +2120,53 @@ function buildLastFixtureText() {
     nonMovers.forEach(p => mentioned.add(p));
   }
 
-  // 6. Points separating bottom 2
+  // 7. Points separating bottom 2
   const n = DATA.players.length;
   const bottom1 = afterRankArr[n - 1];
   const bottom2 = afterRankArr[n - 2];
   const bottomGap = afterTotals[bottom2.player].total - afterTotals[bottom1.player].total;
   parts.push(`${pts(bottomGap)} separating ${bottom2.player} and ${bottom1.player} at the bottom.`);
+
+  // 8. "This could all change..." — for each top-5 player (not the leader), temporarily
+  // inject their predictions as the upcoming fixture results and see if their rank improves.
+  const nowMs2 = Date.now();
+  const nextKickoff = allChron
+    .filter(f => !isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture) && new Date(f.fixture.kickoff).getTime() > nowMs2)
+    .map(f => f.fixture.kickoff).sort()[0];
+
+  if (nextKickoff) {
+    const upcoming = allChron.filter(f =>
+      f.fixture.kickoff === nextKickoff && !isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture)
+    );
+    const scenarioMoves = [];
+    afterRankArr.slice(0, Math.min(5, afterRankArr.length)).forEach(({ player }) => {
+      if (afterRankByPlayer[player] === 1) return; // skip the current leader
+      const savedOvs = {};
+      upcoming.forEach(t => {
+        const key = fixtureKey(t.mwIndex, t.fixIndex);
+        const pred = t.fixture.predictions[player];
+        if (!pred || pred.h === undefined || pred.a === undefined) return;
+        savedOvs[key] = overrides[key];
+        overrides[key] = { h: String(pred.h), a: String(pred.a) };
+      });
+      const hypoRankByP = {};
+      rankPlayers(computeTotals()).forEach(r => { hypoRankByP[r.player] = r.rank; });
+      upcoming.forEach(t => {
+        const key = fixtureKey(t.mwIndex, t.fixIndex);
+        if (savedOvs[key] === undefined) delete overrides[key];
+        else overrides[key] = savedOvs[key];
+      });
+      if (hypoRankByP[player] < afterRankByPlayer[player]) {
+        scenarioMoves.push({ player, to: hypoRankByP[player] });
+      }
+    });
+    if (scenarioMoves.length) {
+      const clauses = scenarioMoves.map(m =>
+        m.to === 1 ? `${m.player} goes top` : `${m.player} climbs to #${m.to}`
+      );
+      parts.push(`This could all change later — ${clauses.join(', ')} if their predictions land.`);
+    }
+  }
 
   const result = { lastF, lastBatch, actual, text: parts.join(" ") };
   _shakerCache = { key: lastF.key, result };

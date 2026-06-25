@@ -2091,7 +2091,7 @@ function buildLastFixtureText() {
     mentioned.add(player);
   }
 
-  // 5. Gwil's position — always present, short quip
+  // 5. Gwil's position — always gets its own line before the non-movers list
   const gwilAfter  = afterRankByPlayer["Gwil"];
   const gwilBefore = beforeRankByPlayer["Gwil"] || gwilAfter;
   const gwilDelta  = gwilBefore - gwilAfter;
@@ -2108,6 +2108,16 @@ function buildLastFixtureText() {
       parts.push(`Gwil holds at #${gwilAfter}, ${pts(gwilGap)} off the pace.`);
     }
     mentioned.add("Gwil");
+  }
+
+  // 6. Non-movers — everyone else who held their position, in rank order
+  const nonMovers = afterRankArr
+    .map(r => r.player)
+    .filter(p => !mentioned.has(p) && (beforeRankByPlayer[p] || afterRankByPlayer[p]) === afterRankByPlayer[p]);
+  if (nonMovers.length) {
+    const list = nonMovers.map(p => `${p} (#${afterRankByPlayer[p]})`).join(", ");
+    parts.push(`Unchanged: ${list}.`);
+    nonMovers.forEach(p => mentioned.add(p));
   }
 
   // 6. Points separating bottom 2
@@ -3042,7 +3052,7 @@ async function pollLiveScores() {
         liveAbsentPollCount[k] = 0;
       } else {
         liveAbsentPollCount[k] = (liveAbsentPollCount[k] || 0) + 1;
-        if (liveAbsentPollCount[k] >= 2) {
+        if (liveAbsentPollCount[k] >= 3) {
           delete liveData[k];
           delete liveAbsentPollCount[k];
           saveLiveData();

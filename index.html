@@ -652,6 +652,7 @@ function loadLiveData() { try { return JSON.parse(localStorage.getItem("liveData
 function saveLiveData() { try { localStorage.setItem("liveData", JSON.stringify(liveData)); } catch {} }
 let liveData = loadLiveData(); // key → { h, a } — persists across page refreshes via localStorage
 let liveManualOverrideKeys = new Set(); // keys where user chose "Clear & enter own" instead of live feed
+let liveAbsentPollCount = {}; // consecutive polls where a key was absent from CF worker response
 const LIVE_WORKER_URL = "https://wc-live-scores.matt-969.workers.dev/";
 const FD_TEAM_MAP = {
   "Bosnia-Herzegovina": "Bosnia and Herzegovina",
@@ -2039,13 +2040,35 @@ function buildLastFixtureText() {
   const mentioned = new Set();
   const parts = [];
 
-  // 1. Who's at top spot — always first
+  // 1. Leader + who's behind and by how many points
   const leader = afterRankArr[0].player;
   const leaderPts = afterTotals[leader].total;
-  parts.push(`${leader} leads the table on ${pts(leaderPts)}.`);
+  const second = afterRankArr[1].player;
+  const gapToSecond = leaderPts - afterTotals[second].total;
+  parts.push(`${leader} leads the table on ${pts(leaderPts)}, with ${second} ${pts(gapToSecond)} behind.`);
   mentioned.add(leader);
+  mentioned.add(second);
 
-  // 2. Biggest positive mover (green ↑) — always shown if anyone moved
+  // 2. Doubles — all exact scores across every fixture in the batch
+  const doublesByPlayer = {};
+  lastBatch.forEach(f => {
+    const a = getActual(f.mwIndex, f.fixIndex, f.fixture);
+    if (!a) return;
+    DATA.players.forEach(p => {
+      const pred = f.fixture.predictions[p];
+      if (pred && pred.h === a.h && pred.a === a.a) {
+        doublesByPlayer[p] = (doublesByPlayer[p] || 0) + pred.stake * 2;
+      }
+    });
+  });
+  const doublers = Object.entries(doublesByPlayer).sort((a, b) => b[1] - a[1]);
+  if (doublers.length) {
+    const doubleText = doublers.map(([p, total]) => `${p} (+${total})`).join(", ");
+    parts.push(`Double${doublers.length > 1 ? "s" : ""}: ${doubleText}. 🎯`);
+    doublers.forEach(([p]) => mentioned.add(p));
+  }
+
+  // 3. Biggest positive mover (green ↑)
   const moves = DATA.players.map(p => ({
     player: p,
     delta: (beforeRankByPlayer[p] || afterRankByPlayer[p]) - afterRankByPlayer[p],
@@ -2059,7 +2082,7 @@ function buildLastFixtureText() {
     mentioned.add(player);
   }
 
-  // 3. Biggest negative mover (red ↓) — always shown if anyone moved down
+  // 4. Biggest negative mover (red ↓)
   const bigDown = moves.filter(m => m.delta < 0).sort((a, b) => a.delta - b.delta)[0];
   if (bigDown && bigDown.player !== (bigUp && bigUp.player)) {
     const { player, delta, after } = bigDown;
@@ -2068,39 +2091,31 @@ function buildLastFixtureText() {
     mentioned.add(player);
   }
 
-  // 4. Exact score shoutouts
-  const exactPlayers = DATA.players.filter(p => {
-    const pred = lastF.fixture.predictions[p];
-    return pred && pred.h === actual.h && pred.a === actual.a;
-  });
-  if (exactPlayers.length) {
-    if (exactPlayers.length === 1 && exactPlayers[0] === "Gwil") {
-      parts.push(`Gwil alone called the exact score. 🎯`);
-      mentioned.add("Gwil");
-    } else {
-      const shown = exactPlayers.slice(0, 3);
-      const suffix = exactPlayers.length > 3 ? ` +${exactPlayers.length - 3} more` : "";
-      parts.push(`${shown.join(", ")}${suffix} called the exact score. 🎯`);
-      exactPlayers.forEach(p => mentioned.add(p));
-    }
-  }
-
-  // 5. Gwil's position — always present
+  // 5. Gwil's position — always present, short quip
   const gwilAfter  = afterRankByPlayer["Gwil"];
   const gwilBefore = beforeRankByPlayer["Gwil"] || gwilAfter;
   const gwilDelta  = gwilBefore - gwilAfter;
+  const gwilPts    = afterTotals["Gwil"].total;
+  const gwilGap    = leaderPts - gwilPts;
   if (!mentioned.has("Gwil")) {
     if (gwilAfter === 1) {
-      parts.push(pick([`Gwil's at the top — as he'd want it. 💪`, `Gwil out front. 💪`, `Top spot belongs to Gwil. 💪`]));
+      parts.push(pick([`Gwil's at the top — right where he wants to be. 💪`, `Gwil leads. Naturally. 💪`, `Top spot: Gwil. As if there was any doubt. 💪`]));
     } else if (gwilDelta > 0) {
-      parts.push(`Gwil ${UP} climbs to #${gwilAfter}.`);
+      parts.push(`Gwil ${UP} climbs to #${gwilAfter}, ${pts(gwilGap)} off the lead.`);
     } else if (gwilDelta < 0) {
-      parts.push(`Gwil ${DOWN} slips to #${gwilAfter}. 😬`);
+      parts.push(`Gwil ${DOWN} slips to #${gwilAfter} — ${pts(gwilGap)} adrift. 😬`);
     } else {
-      parts.push(`Gwil holds at #${gwilAfter}.`);
+      parts.push(`Gwil holds at #${gwilAfter}, ${pts(gwilGap)} off the pace.`);
     }
     mentioned.add("Gwil");
   }
+
+  // 6. Points separating bottom 2
+  const n = DATA.players.length;
+  const bottom1 = afterRankArr[n - 1];
+  const bottom2 = afterRankArr[n - 2];
+  const bottomGap = afterTotals[bottom2.player].total - afterTotals[bottom1.player].total;
+  parts.push(`${pts(bottomGap)} separating ${bottom2.player} and ${bottom1.player} at the bottom.`);
 
   const result = { lastF, lastBatch, actual, text: parts.join(" ") };
   _shakerCache = { key: lastF.key, result };
@@ -3019,15 +3034,17 @@ async function pollLiveScores() {
         });
       });
     });
-    // Retire liveData entries the CF worker is no longer returning — the match has ended.
-    // Only after 165 min since kickoff (90 reg + 30 ET + 30 penalties + buffer) so a brief
-    // API gap mid-match doesn't falsely clear a live score.
+    // Retire liveData for matches the CF worker is no longer returning (match ended).
+    // Require 2 consecutive absent polls (~10s) before clearing, so a single stale
+    // API response mid-match doesn't falsely wipe a live score.
     Object.keys(liveData).forEach(k => {
-      if (!activeKeys.has(k)) {
-        const parts = k.split('_');
-        const fix = DATA.matchweeks[Number(parts[0])]?.fixtures[Number(parts[1])];
-        if (fix && now - new Date(fix.kickoff).getTime() > 165 * 60 * 1000) {
+      if (activeKeys.has(k)) {
+        liveAbsentPollCount[k] = 0;
+      } else {
+        liveAbsentPollCount[k] = (liveAbsentPollCount[k] || 0) + 1;
+        if (liveAbsentPollCount[k] >= 2) {
           delete liveData[k];
+          delete liveAbsentPollCount[k];
           saveLiveData();
           updated = true;
         }

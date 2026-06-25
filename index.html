@@ -2135,6 +2135,7 @@ function buildLastFixtureText() {
 
   // 8. "This could all change..." — for each top-5 player (not the leader), temporarily
   // inject their predictions as the upcoming fixture results and see if their rank improves.
+  let scenarioText = "";
   const nowMs2 = Date.now();
   const nextKickoff = allChron
     .filter(f => !isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture) && new Date(f.fixture.kickoff).getTime() > nowMs2)
@@ -2170,11 +2171,11 @@ function buildLastFixtureText() {
       const clauses = scenarioMoves.map(m =>
         m.to === 1 ? `${m.player} goes top` : `${m.player} climbs to #${m.to}`
       );
-      parts.push(`This could all change later — ${clauses.join(', ')} if their predictions land.`);
+      scenarioText = `This could all change later — ${highlightPlayerNames(clauses.join(', '))} if their predictions land.`;
     }
   }
 
-  const result = { lastF, lastBatch, actual, text: highlightPlayerNames(parts.join(" ")) };
+  const result = { lastF, lastBatch, actual, text: highlightPlayerNames(parts.join(" ")), scenarioText };
   _shakerCache = { key: lastF.key, result };
   return result;
 }
@@ -2194,7 +2195,7 @@ function renderShakerCard() {
   const result = buildLastFixtureText();
   if (!result) { el.style.display = "none"; return; }
   el.style.display = "";
-  const { lastF, lastBatch, actual, text } = result;
+  const { lastF, lastBatch, actual, text, scenarioText } = result;
   const { mwIndex } = lastF;
   const mwName = DATA.matchweeks[mwIndex].name;
   const plural = lastBatch.length > 1;
@@ -2205,7 +2206,8 @@ function renderShakerCard() {
   }).filter(Boolean).join(" &nbsp;·&nbsp; ");
   el.innerHTML = `
     <div class="card-title">Gwil's Movers &amp; Shakers <span style="font-weight:400;color:#999;font-size:12px;">(${resultLabel})</span><span class="meta">${metaScores} · ${mwName}</span></div>
-    <p class="whatif-note">${text}</p>`;
+    <p class="whatif-note">${text}</p>
+    ${scenarioText ? `<p class="whatif-note" style="margin-top:8px;color:#555;font-style:italic;">${scenarioText}</p>` : ''}`;
 }
 
 // Which BONUS_RULES item id(s) feed each bracket category's status badge -- a category can have more

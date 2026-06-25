@@ -229,6 +229,11 @@
   td.player-cell.correct { background: var(--green-bg); }
   td.player-cell.wrong { background: var(--red-bg); }
   td.player-cell.pending { background: var(--grey-bg); }
+  td.player-cell[data-fix-key] { cursor: pointer; }
+  td.player-cell.pending[data-fix-key]:hover { background: #d8dfe8; }
+  td.player-cell.correct[data-fix-key]:hover,
+  td.player-cell.wrong[data-fix-key]:hover,
+  td.player-cell.exact[data-fix-key]:hover { opacity: 0.8; }
   td.player-cell.exact { background: #fff4d6; }
   td.player-cell.cell-bonus-pos { background: var(--green-bg); }
   td.player-cell.cell-bonus-neg { background: var(--red-bg); }
@@ -426,6 +431,9 @@
     50% { opacity: 0.3; transform: scale(0.75); }
   }
   .match-time { font-size: 10px; color: #aaa; margin-left: 4px; font-variant-numeric: tabular-nums; }
+  #presence-wrap { text-align: center; padding: 10px 0 24px; }
+  #presence-indicator { font-size: 11px; color: #666; display: none; }
+  .presence-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4caf77; margin-right: 5px; vertical-align: middle; animation: livePulse 2s ease-in-out infinite; }
   .clear-live-btn, .reset-live-btn {
     border: 1px solid var(--border); background: transparent; border-radius: 4px;
     cursor: pointer; font-size: 10px; padding: 2px 5px; color: #999;
@@ -573,6 +581,7 @@
     .score-input { font-size: 16px; width: 34px; padding: 4px 2px; }
   }
 </style>
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "c3facaaba735463097b2a1ce8cc4eb46"}'></script><!-- End Cloudflare Web Analytics -->
 </head>
 <body>
 
@@ -655,6 +664,10 @@
     away. Everything else stays in sync automatically by refreshing browser, or by clicking "Reset all entered scores"
     and fetch latest results.
   </p>
+
+  <div id="presence-wrap">
+    <span id="presence-indicator"><span class="presence-dot"></span><span id="presence-count">1</span></span>
+  </div>
 
 </div>
 
@@ -1828,6 +1841,7 @@ function renderFixtureRow(mwIndex, fixIndex, fixture) {
   const hVal = ov.h !== undefined ? ov.h : (fixture.actual ? fixture.actual.h : "");
   const aVal = ov.a !== undefined ? ov.a : (fixture.actual ? fixture.actual.a : "");
 
+  const isConfirmed = isFixtureConfirmed(mwIndex, fixIndex, fixture);
   const cells = DATA.players.map(p => {
     const pred = fixture.predictions[p];
     const g = gradeFixture(pred, actual);
@@ -1845,7 +1859,8 @@ function renderFixtureRow(mwIndex, fixIndex, fixture) {
       cls = "wrong";
       ptsHtml = `<div class="pts-line wrong">${g.pts}</div>`;
     }
-    return `<td class="player-cell ${cls}">
+    const extraAttrs = isConfirmed ? "" : ` data-fix-key="${key}" data-pred-h="${pred.h}" data-pred-a="${pred.a}" title="Click to use ${pred.h}–${pred.a} as the score"`;
+    return `<td class="player-cell ${cls}"${extraAttrs}>
       <div class="pred-line">${pred.h}-${pred.a}</div>
       ${ptsHtml}
     </td>`;
@@ -2526,6 +2541,32 @@ function attachInputListeners() {
       renderAll();
     });
   });
+  document.querySelectorAll(".player-cell[data-fix-key]").forEach(cell => {
+    cell.addEventListener("click", () => {
+      const key = cell.dataset.fixKey;
+      const [mwIndex, fixIndex] = key.split("_").map(Number);
+      const fixture = DATA.matchweeks[mwIndex].fixtures[fixIndex];
+      if (isFixtureConfirmed(mwIndex, fixIndex, fixture)) return;
+      if (liveData[key] && !liveManualOverrideKeys.has(key)) return;
+      overrides[key] = { h: cell.dataset.predH, a: cell.dataset.predA };
+      saveOverrides(overrides);
+      flashSaveStatus();
+      unlockedKeys.delete(key);
+      // Anchor the viewport to the clicked row so page-height changes (e.g. what-if blurb
+      // appearing) don't cause the table to jump away from the user's eye.
+      const anchorTop = cell.getBoundingClientRect().top;
+      const s = captureScrollState();
+      renderLeaderboard();
+      renderNextFixtureCard();
+      renderShakerCard();
+      renderPanels();
+      const newAnchor = document.querySelector(`[data-fix-key="${key}"]`);
+      const newScrollY = newAnchor
+        ? s.windowScrollY + (newAnchor.getBoundingClientRect().top - anchorTop)
+        : s.windowScrollY;
+      restoreScrollState(s, newScrollY);
+    });
+  });
   document.querySelectorAll(".clear-live-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       liveManualOverrideKeys.add(btn.dataset.key);
@@ -3155,7 +3196,7 @@ function captureScrollState() {
   if (active) state.scrolls.active = { top: active.scrollTop, left: active.scrollLeft };
   return state;
 }
-function restoreScrollState(state) {
+function restoreScrollState(state, overrideScrollY) {
   const nextFix = document.querySelector("#next-fixture-card .table-scroll");
   if (nextFix && state.scrolls.nextFixture) {
     nextFix.scrollTop = state.scrolls.nextFixture.top;
@@ -3166,7 +3207,7 @@ function restoreScrollState(state) {
     active.scrollTop = state.scrolls.active.top;
     active.scrollLeft = state.scrolls.active.left;
   }
-  window.scrollTo(window.scrollX, state.windowScrollY);
+  window.scrollTo(window.scrollX, overrideScrollY !== undefined ? overrideScrollY : state.windowScrollY);
 }
 
 function renderAll() {
@@ -3279,6 +3320,34 @@ function refreshFixtureTitleLabel() {
 setInterval(refreshFixtureTitleLabel, 30000);
 pollLiveScores(); // immediate first check on page load
 setInterval(pollLiveScores, 5000);
+
+// --- Presence counter ---
+// Only counts sessions where the tab is currently visible (not background/locked phone).
+// Sessions expire from Cloudflare KV after 3 minutes of no pings, so the number reflects
+// people actively looking at the page right now, not just anyone who opened it today.
+(function () {
+  let sid = localStorage.getItem('wc2026_sid');
+  if (!sid) { sid = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); localStorage.setItem('wc2026_sid', sid); }
+  const PRESENCE_URL = CARDS_RELAY_URL + 'presence';
+
+  async function ping() {
+    if (document.visibilityState !== 'visible') return;
+    try {
+      const r = await fetch(`${PRESENCE_URL}?sid=${sid}`);
+      if (!r.ok) return;
+      const { count } = await r.json();
+      const indicator = document.getElementById('presence-indicator');
+      const countEl = document.getElementById('presence-count');
+      if (!indicator || !countEl) return;
+      countEl.textContent = count;
+      indicator.style.display = count > 0 ? 'inline' : 'none';
+    } catch (e) { /* silent — presence is decorative, never block on failure */ }
+  }
+
+  ping();
+  setInterval(ping, 30000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') ping(); });
+}());
 </script>
 
 </body>

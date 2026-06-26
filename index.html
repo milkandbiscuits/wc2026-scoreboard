@@ -1636,23 +1636,57 @@ function renderLeaderboard() {
   const maxCorrectByMw = DATA.matchweeks.map((_, mi) => Math.max(...rows.map(r => r.correctByMw[mi])));
   const maxExactByMw = DATA.matchweeks.map((_, mi) => Math.max(...rows.map(r => r.exactByMw[mi])));
 
-  // Rank-move arrows (landscape/desktop only — portrait hides via CSS).
-  // Reference point: end of the matchweek BEFORE the latest one that has any resolved fixture.
-  // So between matchweeks (MW2 done, MW3 not started yet) the arrows show MW2's total shift
-  // from MW1. Once MW3 results come in, the reference flips to MW2 and arrows show MW3's shift.
-  const prevRankByPlayer = {};
-  const mwsWithResults = DATA.matchweeks
-    .map((mw, mi) => ({ mi, has: mw.fixtures.some((fix, fi) => !!getActual(mi, fi, fix)) }))
-    .filter(m => m.has);
-  if (mwsWithResults.length >= 2) {
-    const refMwIndex = mwsWithResults[mwsWithResults.length - 2].mi;
-    const prevOnlyKeys = new Set();
+  // Rank-move arrows — two modes depending on whether a matchweek is currently in progress:
+  //
+  // OPEN MW (some fixtures confirmed, some still pending):
+  //   Game-by-game mode — compare rank just before vs just after the last confirmed batch.
+  //   Arrow resets with each new result so it always shows the most recent game's impact.
+  //
+  // CLOSED / between MWs (no matchweek partially done):
+  //   MW-to-MW mode — compare rank at end of previous closed MW vs end of latest closed MW.
+  //   Arrow freezes once a MW is complete and shows the overall position shift for that MW.
+  const prevRankByPlayer = {}, afterRankByPlayerConfirmed = {};
+  {
+    const closedMwIndices = [];
+    let hasOpenMw = false;
     DATA.matchweeks.forEach((mw, mi) => {
-      if (mi <= refMwIndex) mw.fixtures.forEach((_, fi) => prevOnlyKeys.add(fixtureKey(mi, fi)));
+      const total = mw.fixtures.length;
+      if (total === 0) return;
+      const nConfirmed = mw.fixtures.filter((fix, fi) => isFixtureConfirmed(mi, fi, fix)).length;
+      if (nConfirmed > 0 && nConfirmed < total) hasOpenMw = true;
+      if (nConfirmed === total) closedMwIndices.push(mi);
     });
-    rankPlayers(computeTotals(undefined, prevOnlyKeys)).forEach(r => {
-      prevRankByPlayer[r.player] = r.rank;
-    });
+
+    if (hasOpenMw) {
+      // Game-by-game: before/after the last confirmed kickoff batch
+      const allChron = allFixturesChronological();
+      let lastKickoff = null;
+      allChron.forEach(f => { if (isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture)) lastKickoff = f.fixture.kickoff; });
+      if (lastKickoff !== null) {
+        const confirmedKeys = new Set(), beforeKeys = new Set();
+        allChron.forEach(f => {
+          if (!isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture)) return;
+          confirmedKeys.add(f.key);
+          if (f.fixture.kickoff !== lastKickoff) beforeKeys.add(f.key);
+        });
+        rankPlayers(computeTotals(undefined, confirmedKeys)).forEach(r => { afterRankByPlayerConfirmed[r.player] = r.rank; });
+        rankPlayers(computeTotals(undefined, beforeKeys)).forEach(r => { prevRankByPlayer[r.player] = r.rank; });
+      }
+    } else if (closedMwIndices.length >= 2) {
+      // MW-to-MW: end of latest closed MW vs end of previous closed MW
+      const lastMi = closedMwIndices[closedMwIndices.length - 1];
+      const prevMi = closedMwIndices[closedMwIndices.length - 2];
+      const lastKeys = new Set(), prevKeys = new Set();
+      DATA.matchweeks.forEach((mw, mi) => {
+        mw.fixtures.forEach((_, fi) => {
+          const k = fixtureKey(mi, fi);
+          if (mi <= lastMi) lastKeys.add(k);
+          if (mi <= prevMi) prevKeys.add(k);
+        });
+      });
+      rankPlayers(computeTotals(undefined, lastKeys)).forEach(r => { afterRankByPlayerConfirmed[r.player] = r.rank; });
+      rankPlayers(computeTotals(undefined, prevKeys)).forEach(r => { prevRankByPlayer[r.player] = r.rank; });
+    }
   }
 
   const body = document.getElementById("leaderboard-body");
@@ -1706,7 +1740,8 @@ function renderLeaderboard() {
       ? `<span class="bonus-info-box" title="${bonusHits.map(it => `${it.label}: ${it.pts > 0 ? "+" : ""}${it.pts}`).join("; ").replace(/"/g, "&quot;")}">${bonusDisplay}</span>`
       : bonusDisplay;
     const prevRank = prevRankByPlayer[r.player];
-    const rankDelta = prevRank !== undefined ? prevRank - (i + 1) : 0;
+    const afterRank = afterRankByPlayerConfirmed[r.player];
+    const rankDelta = (prevRank !== undefined && afterRank !== undefined) ? prevRank - afterRank : 0;
     const rankMoveHtml = rankDelta > 0
       ? `<span class="rank-move rank-move-up">↑${rankDelta}</span>`
       : rankDelta < 0

@@ -302,9 +302,16 @@
     white-space: nowrap;
     cursor: help;
   }
-  td.mw-past { font-size: 11px; color: #666; font-weight: 700; }
+  td.mw-past { font-size: 11px; color: #666; font-weight: 700; text-align: left; }
   td.mw-past.total-pos, td.mw-past.total-neg { color: #666; }
   td.mw-past .mw-live-lead-box { color: #aaa; border-color: #aaa; }
+  .mw-pos-delta { font-size: 9px; font-weight: 700; margin-left: 3px; }
+  .mw-pos-delta-up   { color: #22a855; }
+  .mw-pos-delta-down { color: #e05555; }
+  .mw-pos-delta-nc   { color: #bbb; }
+  .mw-pos-delta-rank { color: #888; }
+  td.mw-open-badge { text-align: left; }
+  @media (orientation: portrait) { .mw-pos-delta { display: none; } }
   /* Same look as .mw-stat-badge, kept as its own class because .mw-stat-badge is forced
      display:none on portrait (see media query below) -- this one needs the opposite. */
   .exact-suffix-plain {
@@ -1636,29 +1643,50 @@ function renderLeaderboard() {
   const maxCorrectByMw = DATA.matchweeks.map((_, mi) => Math.max(...rows.map(r => r.correctByMw[mi])));
   const maxExactByMw = DATA.matchweeks.map((_, mi) => Math.max(...rows.map(r => r.exactByMw[mi])));
 
-  // Rank-move arrows — two modes depending on whether a matchweek is currently in progress:
-  //
-  // OPEN MW (some fixtures confirmed, some still pending):
-  //   Game-by-game mode — compare rank just before vs just after the last confirmed batch.
-  //   Arrow resets with each new result so it always shows the most recent game's impact.
-  //
-  // CLOSED / between MWs (no matchweek partially done):
-  //   MW-to-MW mode — compare rank at end of previous closed MW vs end of latest closed MW.
-  //   Arrow freezes once a MW is complete and shows the overall position shift for that MW.
+  // Identify closed MWs (all fixtures confirmed) — used by both arrow logic and per-MW badges.
+  const closedMwIndices = [];
+  let hasOpenMw = false, openMwIndex = -1;
+  DATA.matchweeks.forEach((mw, mi) => {
+    const total = mw.fixtures.length;
+    if (total === 0) return;
+    const nConfirmed = mw.fixtures.filter((fix, fi) => isFixtureConfirmed(mi, fi, fix)).length;
+    if (nConfirmed > 0 && nConfirmed < total) { hasOpenMw = true; openMwIndex = mi; }
+    if (nConfirmed === total) closedMwIndices.push(mi);
+  });
+
+  // Per-MW position-change badges for closed matchweek columns (landscape only).
+  // mwPosDelta[mi][player] = rank before that MW minus rank after = positive means climbed.
+  // mwFinishRank[mi][player] = finishing rank after that MW (used for the first closed MW only,
+  // where there is no previous MW to compare against so we show "#N" instead of a delta).
+  const mwPosDelta = {}, mwFinishRank = {};
+  {
+    const rankAfterMw = {};
+    closedMwIndices.forEach(mi => {
+      const keys = new Set();
+      DATA.matchweeks.forEach((mw, mwi) => {
+        if (mwi <= mi) mw.fixtures.forEach((_, fi) => keys.add(fixtureKey(mwi, fi)));
+      });
+      const ranks = {};
+      rankPlayers(computeTotals(undefined, keys)).forEach(r => { ranks[r.player] = r.rank; });
+      rankAfterMw[mi] = ranks;
+    });
+    closedMwIndices.forEach((mi, idx) => {
+      mwFinishRank[mi] = rankAfterMw[mi]; // finishing position for every closed MW
+      if (idx === 0) return;              // no delta for the first closed MW
+      const after = rankAfterMw[mi];
+      const before = rankAfterMw[closedMwIndices[idx - 1]];
+      const deltas = {};
+      DATA.players.forEach(p => { deltas[p] = (before[p] || 0) - (after[p] || 0); });
+      mwPosDelta[mi] = deltas;
+    });
+  }
+
+  // Rank-move arrows (player name column) — two modes:
+  // OPEN MW: game-by-game — before/after last confirmed batch, agrees with M&S blurb.
+  // CLOSED / between MWs: overall shift from previous closed MW to latest closed MW.
   const prevRankByPlayer = {}, afterRankByPlayerConfirmed = {};
   {
-    const closedMwIndices = [];
-    let hasOpenMw = false;
-    DATA.matchweeks.forEach((mw, mi) => {
-      const total = mw.fixtures.length;
-      if (total === 0) return;
-      const nConfirmed = mw.fixtures.filter((fix, fi) => isFixtureConfirmed(mi, fi, fix)).length;
-      if (nConfirmed > 0 && nConfirmed < total) hasOpenMw = true;
-      if (nConfirmed === total) closedMwIndices.push(mi);
-    });
-
     if (hasOpenMw) {
-      // Game-by-game: before/after the last confirmed kickoff batch
       const allChron = allFixturesChronological();
       let lastKickoff = null;
       allChron.forEach(f => { if (isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture)) lastKickoff = f.fixture.kickoff; });
@@ -1673,7 +1701,6 @@ function renderLeaderboard() {
         rankPlayers(computeTotals(undefined, beforeKeys)).forEach(r => { prevRankByPlayer[r.player] = r.rank; });
       }
     } else if (closedMwIndices.length >= 2) {
-      // MW-to-MW: end of latest closed MW vs end of previous closed MW
       const lastMi = closedMwIndices[closedMwIndices.length - 1];
       const prevMi = closedMwIndices[closedMwIndices.length - 2];
       const lastKeys = new Set(), prevKeys = new Set();
@@ -1700,15 +1727,41 @@ function renderLeaderboard() {
       const eLeadMw = past && maxExactByMw[mi] > 0 && r.exactByMw[mi] === maxExactByMw[mi];
       const cPart = cLeadMw ? `<span class="stat-leader-medal">C${r.correctByMw[mi]}</span>` : `C${r.correctByMw[mi]}`;
       const ePart = eLeadMw ? `<span class="stat-leader-medal">✦${r.exactByMw[mi]}</span>` : `✦${r.exactByMw[mi]}`;
-      const statBadge = `<span class="mw-stat-badge" title="Correct/exact scores this matchweek">${cPart}·${ePart}</span>`;
+      const statBadge = `<span class="mw-stat-badge" title="Correct/exact scores this matchweek">${cPart}${ePart}</span>`;
+      const isOpenMwCell = mi === openMwIndex;
+      const lastClosedMi = closedMwIndices.length > 0 ? closedMwIndices[closedMwIndices.length - 1] : -1;
+      const pd = mwPosDelta[mi] ? mwPosDelta[mi][r.player] : 0;
+      let rankBadge = "", arrowBadge = "";
+      if (past && mwFinishRank[mi]) {
+        rankBadge = `<span class="mw-pos-delta mw-pos-delta-rank" title="Finished #${mwFinishRank[mi][r.player]} after this matchweek">#${mwFinishRank[mi][r.player]}</span>`;
+        if (mwPosDelta[mi]) {
+          arrowBadge = pd > 0
+            ? `<span class="mw-pos-delta mw-pos-delta-up" title="Moved up ${pd} place${pd > 1 ? "s" : ""} this matchweek">↑${pd}</span>`
+            : pd < 0
+              ? `<span class="mw-pos-delta mw-pos-delta-down" title="Dropped ${-pd} place${-pd > 1 ? "s" : ""} this matchweek">↓${-pd}</span>`
+              : "";
+        }
+      } else if (isOpenMwCell && lastClosedMi >= 0 && mwFinishRank[lastClosedMi]) {
+        const currentRank = i + 1;
+        const prevRank = mwFinishRank[lastClosedMi][r.player];
+        const delta = prevRank - currentRank;
+        rankBadge = `<span class="mw-pos-delta mw-pos-delta-rank">#${currentRank}</span>`;
+        arrowBadge = delta > 0
+          ? `<span class="mw-pos-delta mw-pos-delta-up">↑${delta}</span>`
+          : delta < 0
+            ? `<span class="mw-pos-delta mw-pos-delta-down">↓${-delta}</span>`
+            : "";
+      }
+      const posBadge = `${rankBadge}${arrowBadge}`;
+      const openBadgeClass = (isOpenMwCell && posBadge) ? " mw-open-badge" : "";
       if (r.bonusMw[mi] > 0) {
-        return `<td class="num${past}"><span class="mw-leader-box" title="Matchweek winner: +${MATCHWEEK_WINNER_BONUS} bonus included">${display}</span>${statBadge}</td>`;
+        return `<td class="num${past}${openBadgeClass}"><span style="white-space:nowrap"><span class="mw-leader-box" title="Matchweek winner: +${MATCHWEEK_WINNER_BONUS} bonus included">${display}</span>${posBadge}</span>${statBadge}</td>`;
       }
       if (r.liveLeadMw[mi]) {
-        return `<td class="num${past}"><span class="mw-live-lead-box" title="Currently leading this matchweek — bonus not awarded until every fixture is resolved">${display}</span>${statBadge}</td>`;
+        return `<td class="num${past}${openBadgeClass}"><span style="white-space:nowrap"><span class="mw-live-lead-box" title="Currently leading this matchweek — bonus not awarded until every fixture is resolved">${display}</span>${posBadge}</span>${statBadge}</td>`;
       }
       const cls = v > 0 ? "total-pos" : (v < 0 ? "total-neg" : "");
-      return `<td class="num ${cls}${past}">${display}${statBadge}</td>`;
+      return `<td class="num ${cls}${past}${openBadgeClass}"><span style="white-space:nowrap">${display}${posBadge}</span>${statBadge}</td>`;
     }).join("");
     // Leader highlight for Correct/Exact: a 🥇 medal, no box/border -- a bordered pill looked messy
     // here, especially with two adjacent (Correct's pill butting up against Exact's), so this drops

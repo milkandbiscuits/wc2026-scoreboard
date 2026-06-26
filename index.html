@@ -2540,7 +2540,8 @@ function provisionalTotalsBonus(category, player) {
   } else if (category === "Total Tournament Cards") {
     const ct = tournamentFacts.cardsTotal;
     if (!ct || typeof ct.total !== "number") return null;
-    proj = Math.round(ct.total / games * TOTAL_TOURNAMENT_GAMES);
+    const cardGames = ct.games != null ? ct.games : games; // ESPN's ingested games (it lags fixtures)
+    proj = Math.round(ct.total / cardGames * TOTAL_TOURNAMENT_GAMES);
     exactKey = "totalCardsExact"; nearKey = "totalCardsNear";
   } else {
     return null;
@@ -3598,10 +3599,14 @@ function renderPredictions() {
   const { goals, games } = computeGoalTally();
   const goalsProj = games ? Math.round((goals / games) * TOTAL_TOURNAMENT_GAMES) : null;
 
-  const ct = tournamentFacts.cardsTotal; // { yellow, red, total, ... } or undefined
+  const ct = tournamentFacts.cardsTotal; // { yellow, red, total, games, ... } or undefined
   const cardsTotal = ct ? ct.total : null;
-  const cardsProj = (cardsTotal != null && games)
-    ? Math.round((cardsTotal / games) * TOTAL_TOURNAMENT_GAMES) : null;
+  // Cards come from ESPN, which lags behind the live fixtures -- so the card total covers ESPN's
+  // games-ingested count, NOT the (fresher) fixture count. Use ct.games as the denominator; fall
+  // back to the fixture count for older Worker responses that didn't include it.
+  const cardGames = (ct && ct.games != null) ? ct.games : games;
+  const cardsProj = (cardsTotal != null && cardGames)
+    ? Math.round((cardsTotal / cardGames) * TOTAL_TOURNAMENT_GAMES) : null;
 
   const ruleNote = `<span class="pred-rule">+20 exact · +5 within 10%</span>`;
   const goalsSub = games
@@ -3609,15 +3614,15 @@ function renderPredictions() {
     : "no games played yet";
 
   const cardsSub = ct
-    ? `<b>${ct.total}</b> cards (${ct.yellow}🟨 ${ct.red}🟥) in <b>${games}</b> games · projected <b class="pred-proj">~${cardsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games · ${ruleNote}`
+    ? `<b>${ct.total}</b> cards (${ct.yellow}🟨 ${ct.red}🟥) in <b>${cardGames}</b> games · projected <b class="pred-proj">~${cardsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games · ${ruleNote}`
     : "waiting for live card data…";
 
   // Brief "how the projection works" note shown at the bottom of each league.
   const goalsCalc = games
     ? `How it's projected: ${goals} ÷ ${games} = ${(goals / games).toFixed(2)} goals/game × ${TOTAL_TOURNAMENT_GAMES} games ≈ ${goalsProj}. Moves as results come in.`
     : null;
-  const cardsCalc = (cardsTotal != null && games)
-    ? `How it's projected: ${cardsTotal} ÷ ${games} = ${(cardsTotal / games).toFixed(2)} cards/game × ${TOTAL_TOURNAMENT_GAMES} games ≈ ${cardsProj}. Moves as results come in.`
+  const cardsCalc = (cardsTotal != null && cardGames)
+    ? `How it's projected: ${cardsTotal} ÷ ${cardGames} = ${(cardsTotal / cardGames).toFixed(2)} cards/game × ${TOTAL_TOURNAMENT_GAMES} games ≈ ${cardsProj}. Moves as results come in.`
     : null;
 
   goalsCard.innerHTML = predSectionHTML({

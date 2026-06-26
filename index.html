@@ -252,16 +252,23 @@
   .pred-card .pred-section { margin-bottom: 20px; }
   .pred-card .pred-section:last-child { margin-bottom: 0; }
   .pred-card .pred-head { font-weight: 800; font-size: 14px; margin: 0 0 1px; display: flex; align-items: center; gap: 7px; }
-  .pred-card .pred-chevron { display: none; font-size: 10px; color: #aaa; transition: transform .15s ease; }
+  .pred-card .pred-chevron { display: none; font-size: 13px; color: #1b66c9; transition: transform .15s ease; }
+  .pred-card .pred-tap-hint { display: none; }
+  .pred-rule { color: #b8860b; font-weight: 700; white-space: nowrap; }
   /* Collapsible only on touch devices (phones/tablets, either orientation). Desktop (fine
-     pointer) always shows everything and the chevron stays hidden. */
+     pointer) always shows everything and the chevron/hint stay hidden. On touch the header is
+     styled as an obvious tappable bar with a "tap to open/close" hint. */
   @media (pointer: coarse) {
-    .pred-card .pred-head { cursor: pointer; user-select: none; }
+    .pred-card .pred-head { cursor: pointer; user-select: none; background: #f4f7fb; border: 1px solid #dce4ef; border-radius: 8px; padding: 9px 11px; margin-bottom: 6px; }
+    .pred-card .pred-head:active { background: #e9eff7; }
     .pred-card .pred-chevron { display: inline-block; }
     .pred-card .pred-section.collapsed .pred-chevron { transform: rotate(-90deg); }
     .pred-card .pred-section.collapsed .pred-body { display: none; }
+    .pred-card .pred-tap-hint { display: inline; margin-left: auto; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #1b66c9; }
+    .pred-card .pred-section.collapsed .pred-tap-hint::after { content: "tap to open"; }
+    .pred-card .pred-section:not(.collapsed) .pred-tap-hint::after { content: "tap to close"; }
   }
-  .pred-card .pred-sub { font-size: 12px; color: #888; margin: 0 0 9px; }
+  .pred-card .pred-sub { font-size: 12px; color: #888; margin: 10px 0 9px; }
   .pred-card .pred-sub b { color: #333; font-variant-numeric: tabular-nums; }
   .pred-card .pred-sub .pred-proj { color: #1b66c9; }
   /* Match the main leaderboard's table styling (header bar, padding, borders). */
@@ -281,6 +288,7 @@
   .pred-pending { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: #b0b0b0; margin-left: 5px; }
   .pred-miss    { color: #ccc; }
   .pred-foot    { font-size: 11px; color: #999; margin-top: 8px; }
+  .pred-calc    { font-size: 10.5px; color: #aaa; font-style: italic; margin-top: 3px; }
   td.results-only-note { color: #999; font-style: italic; font-size: 12px; }
   tr.results-only-row td.col-fixture { font-weight: 600; }
   /* Bonus Rules tab reuses table.games for the same font/border/header look as the matchweek
@@ -3537,7 +3545,7 @@ function togglePred(key) {
 
 // One prediction section: sorts players by closeness to the projection, highlights the leader.
 function predSectionHTML(opts) {
-  const { key, title, sub, picks, proj, open } = opts;
+  const { key, title, sub, picks, proj, open, calc } = opts;
   const rows = DATA.players
     .map(p => ({ player: p, guess: Number(picks[p]) }))
     .filter(r => !isNaN(r.guess));
@@ -3572,13 +3580,14 @@ function predSectionHTML(opts) {
   }).join("");
 
   return `<div class="pred-section${open ? "" : " collapsed"}" data-key="${key}">`
-    + `<div class="pred-head" onclick="togglePred('${key}')"><span class="pred-chevron">▾</span><span>${title}</span></div>`
+    + `<div class="pred-head" onclick="togglePred('${key}')"><span class="pred-chevron">▾</span><span class="pred-title">${title}</span><span class="pred-tap-hint"></span></div>`
     + `<div class="pred-sub">${sub}</div>`
     + `<div class="pred-body"><table class="pred-table"><thead><tr>`
     + `<th class="pred-rank"></th><th>Player</th><th class="num">Guess</th><th class="num">vs proj.</th><th class="num">Bonus</th>`
     + `</tr></thead><tbody>${body}</tbody></table>`
-    + `<div class="pred-foot">Bonus pending — awarded when all fixtures are resolved</div></div>`
-    + `</div>`;
+    + `<div class="pred-foot">Provisional (TBC) — the <b>+20</b> / <b>+5</b> confirms once every fixture is resolved</div>`
+    + (calc ? `<div class="pred-calc">${calc}</div>` : "")
+    + `</div></div>`;
 }
 
 function renderPredictions() {
@@ -3594,29 +3603,40 @@ function renderPredictions() {
   const cardsProj = (cardsTotal != null && games)
     ? Math.round((cardsTotal / games) * TOTAL_TOURNAMENT_GAMES) : null;
 
+  const ruleNote = `<span class="pred-rule">+20 exact · +5 within 10%</span>`;
   const goalsSub = games
-    ? `<b>${goals}</b> goals in <b>${games}</b> games · projected <b class="pred-proj">~${goalsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games`
+    ? `<b>${goals}</b> goals in <b>${games}</b> games · projected <b class="pred-proj">~${goalsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games · ${ruleNote}`
     : "no games played yet";
 
   const cardsSub = ct
-    ? `<b>${ct.total}</b> cards (${ct.yellow}🟨 ${ct.red}🟥) in <b>${games}</b> games · projected <b class="pred-proj">~${cardsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games`
+    ? `<b>${ct.total}</b> cards (${ct.yellow}🟨 ${ct.red}🟥) in <b>${games}</b> games · projected <b class="pred-proj">~${cardsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games · ${ruleNote}`
     : "waiting for live card data…";
+
+  // Brief "how the projection works" note shown at the bottom of each league.
+  const goalsCalc = games
+    ? `How it's projected: ${goals} ÷ ${games} = ${(goals / games).toFixed(2)} goals/game × ${TOTAL_TOURNAMENT_GAMES} games ≈ ${goalsProj}. Moves as results come in.`
+    : null;
+  const cardsCalc = (cardsTotal != null && games)
+    ? `How it's projected: ${cardsTotal} ÷ ${games} = ${(cardsTotal / games).toFixed(2)} cards/game × ${TOTAL_TOURNAMENT_GAMES} games ≈ ${cardsProj}. Moves as results come in.`
+    : null;
 
   goalsCard.innerHTML = predSectionHTML({
     key: "goals",
     open: predOpen.goals,
-    title: "⚽ Total Tournament Goals",
+    title: "⚽ Total Goals Mini League",
     sub: goalsSub,
     picks: DATA.bracketPicks.picks["Total Tournament Goals"],
     proj: goalsProj,
+    calc: goalsCalc,
   });
   cardsCard.innerHTML = predSectionHTML({
     key: "cards",
     open: predOpen.cards,
-    title: "🟨 Total Tournament Cards",
+    title: "🟨 Total Cards Mini League",
     sub: cardsSub,
     picks: DATA.bracketPicks.picks["Total Tournament Cards"],
     proj: cardsProj,
+    calc: cardsCalc,
   });
 }
 

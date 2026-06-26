@@ -277,7 +277,8 @@
   table.pred-table th { background: #fafbfc; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: #555; }
   table.pred-table th.num, table.pred-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
   table.pred-table td.pred-rank { color: #bbb; width: 1%; white-space: nowrap; }
-  table.pred-table tr.pred-closest td { background: var(--green-bg); font-weight: 700; }
+  table.pred-table tr.pred-pending-row td { background: #fff6e0; }            /* pale amber: on track for points */
+  table.pred-table tr.pred-closest td { background: #ffe3a8; font-weight: 700; } /* darker amber: current leader */
   .pred-over  { color: #e05555; }
   .pred-under { color: #3a82d6; }
   .pred-zero  { color: #22a855; font-weight: 700; }
@@ -2334,14 +2335,55 @@ function buildLastFixtureText() {
   const mentioned = new Set();
   const parts = [];
 
-  // 1. Leader + who's behind and by how many points
+  // 1. Leader line — a new-leader shout-out, neck-and-neck when they're level on points,
+  // a razor-thin lead, or a comfortable one. The title race gets top billing and the most heat.
   const leader = afterRankArr[0].player;
   const leaderPts = afterTotals[leader].total;
   const second = afterRankArr[1].player;
   const gapToSecond = leaderPts - afterTotals[second].total;
-  parts.push(`${leader} leads the table on ${pts(leaderPts)}, with ${second} ${pts(gapToSecond)} behind.`);
+  const newLeader = (beforeRankByPlayer[leader] || 1) !== 1; // someone has just taken over top spot
+  let leaderLine;
+  if (gapToSecond === 0) {
+    leaderLine = pick([
+      `🔥 Dead level at the top — ${leader} and ${second} can't be separated on ${pts(leaderPts)}. It does not get tighter than this.`,
+      `🔥 Deadlock at the summit: ${leader} and ${second} both on ${pts(leaderPts)}, nothing between them but the tie-break.`,
+      `🔥 ${leader} and ${second} are locked together out front on ${pts(leaderPts)} — neck and neck, blow for blow.`,
+    ]);
+  } else if (newLeader) {
+    leaderLine = pick([
+      `🚨 NEW LEADER! ${leader} ${pick(["storms", "surges", "muscles"])} to the top on ${pts(leaderPts)}, ${pts(gapToSecond)} clear of ${second}.`,
+      `🚨 All change at the summit — ${leader} seizes top spot on ${pts(leaderPts)}, ${pts(gapToSecond)} ahead of ${second}.`,
+      `🚨 ${leader} grabs the lead, vaulting to #1 on ${pts(leaderPts)} with ${second} ${pts(gapToSecond)} adrift.`,
+    ]);
+  } else if (gapToSecond <= 5) {
+    leaderLine = pick([
+      `${leader} clings to top spot on ${pts(leaderPts)} — ${second} breathing down their neck, just ${pts(gapToSecond)} back. 😮‍💨`,
+      `Razor-thin out front: ${leader} leads ${second} by a mere ${pts(gapToSecond)}. One result swings it.`,
+      `${leader} holds the lead on ${pts(leaderPts)}, but ${second} is right there — ${pts(gapToSecond)} the only thing between them.`,
+    ]);
+  } else {
+    leaderLine = pick([
+      `${leader} leads the table on ${pts(leaderPts)}, ${second} ${pts(gapToSecond)} behind.`,
+      `${leader} sits top on ${pts(leaderPts)}, ${pts(gapToSecond)} clear of ${second}.`,
+      `Out front: ${leader} on ${pts(leaderPts)}, ${second} ${pts(gapToSecond)} adrift.`,
+    ]);
+  }
+  parts.push(leaderLine);
   mentioned.add(leader);
   mentioned.add(second);
+
+  // 1b. Title race — if 3rd is also within touching distance, flag the chasing pack.
+  const third = afterRankArr[2] ? afterRankArr[2].player : null;
+  if (third && !mentioned.has(third)) {
+    const gapToThird = leaderPts - afterTotals[third].total;
+    if (gapToThird <= 10) {
+      parts.push(pick([
+        `${third} won't go away either — only ${pts(gapToThird)} off the summit. This title race is wide open. 🏁`,
+        `And ${third} lurks ${pts(gapToThird)} back — three-way scrap at the top, going to the wire. 🏁`,
+      ]));
+      mentioned.add(third);
+    }
+  }
 
   // 2. Doubles — all exact scores across every fixture in the batch
   const doublesByPlayer = {};
@@ -2402,6 +2444,36 @@ function buildLastFixtureText() {
       parts.push(`Gwil holds at #${gwilAfter}, ${pts(gwilGap)} off the pace.`);
     }
     mentioned.add("Gwil");
+  }
+
+  // 5b. Gaz E is piggybacking Gwil's predictions — a running gag, phrased by how the copy is faring.
+  if (afterTotals["Gaz E"] && !mentioned.has("Gaz E")) {
+    const gazRank = afterRankByPlayer["Gaz E"];
+    const diff = afterTotals["Gaz E"].total - afterTotals["Gwil"].total;
+    let gazLine;
+    if (Math.abs(diff) <= 3) {
+      gazLine = pick([
+        `Gaz E (#${gazRank}) is still cribbing Gwil's picks — shadowing the master almost point-for-point. 📋`,
+        `Gaz E (#${gazRank}) rides Gwil's coattails again, copying his homework to the letter. 📋`,
+      ]);
+    } else if (diff > 0) {
+      gazLine = `Gaz E (#${gazRank}) copies Gwil's picks — and is somehow ${pts(diff)} ahead of him. The student outscores the master. 😏`;
+    } else {
+      gazLine = `Gaz E (#${gazRank}) cribs Gwil's picks yet trails him by ${pts(-diff)} — even the cheat sheet isn't helping. 📋`;
+    }
+    parts.push(gazLine);
+    mentioned.add("Gaz E");
+  }
+
+  // 5c. The AI has been suspiciously good since MW1 — flag it whenever it's lurking near the top.
+  const aiRank = afterRankByPlayer["🤖"];
+  if (aiRank && aiRank <= 6 && !mentioned.has("🤖")) {
+    parts.push(pick([
+      `🤖 sits #${aiRank} — suspiciously sharp since Matchweek 1. Someone check it isn't peeking at the results. 🤨`,
+      `🤖 holds #${aiRank}. The bot's been ominously good from the off — time to rage against the machine. 🤖`,
+      `Still no explanation for 🤖 at #${aiRank}. Eerily good since MW1. Sceptics, assemble. 👀`,
+    ]));
+    mentioned.add("🤖");
   }
 
   // 6. Non-movers — everyone else who held their position, in rank order
@@ -3560,18 +3632,20 @@ function predSectionHTML(opts) {
 
   const body = rows.map((r, i) => {
     const closest = proj != null && i === 0;
-    let diffCell = "—", bonusCell = `<span class="pred-miss">—</span>`;
+    let diffCell = "—", bonusCell = `<span class="pred-miss">—</span>`, pts = 0;
     if (proj != null) {
       const d = r.diff;
       const cls = d > 0 ? "pred-over" : d < 0 ? "pred-under" : "pred-zero";
       const txt = d > 0 ? `+${d}` : d < 0 ? `${d}` : "spot on";
       diffCell = `<span class="${cls}">${txt}</span>`;
       // Provisional bonus: +20 exact, +5 within 10% of the projection. Pending until the end.
-      const pts = r.guess === proj ? 20 : (Math.abs(d) / proj <= 0.10 ? 5 : 0);
+      pts = r.guess === proj ? 20 : (Math.abs(d) / proj <= 0.10 ? 5 : 0);
       if (pts > 0) bonusCell = `<span class="pred-bonus">+${pts}</span><span class="pred-pending">pending</span>`;
     }
     const tag = closest ? ` <span class="pred-tag">🎯</span>` : "";
-    return `<tr class="${closest ? "pred-closest" : ""}">`
+    // Whole-row amber for anyone on track for pending points; a darker amber for the leader.
+    const rowClass = closest ? "pred-closest" : (pts > 0 ? "pred-pending-row" : "");
+    return `<tr class="${rowClass}">`
       + `<td class="pred-rank">${i + 1}</td>`
       + `<td>${r.player}${tag}</td>`
       + `<td class="num">${r.guess}</td>`

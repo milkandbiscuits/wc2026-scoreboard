@@ -235,9 +235,54 @@
   td.player-cell.wrong[data-fix-key]:hover,
   td.player-cell.exact[data-fix-key]:hover { opacity: 0.8; }
   td.player-cell.exact { background: #fff4d6; }
-  td.player-cell.cell-bonus-pos { background: var(--green-bg); }
-  td.player-cell.cell-bonus-neg { background: var(--red-bg); }
+  td.player-cell.cell-bonus-pos     { background: var(--green-bg); }
+  td.player-cell.cell-bonus-neg     { background: var(--red-bg); }
+  td.player-cell.cell-bonus-neutral { background: var(--grey-bg); }
+  td.player-cell.cell-bonus-provisional { background: #fff4d6; }
+  .bonus-provisional { color: #b8860b; font-weight: 700; }
   .pred-line { font-size: 10.5px; color: #777; line-height: 1.1; }
+  /* Prediction tables (Total Tournament Goals / Cards) under the leaderboard */
+  /* Stacked by default (phones, any orientation); side by side on wide mouse-driven desktops. */
+  .pred-cards-row { display: flex; flex-direction: column; }
+  @media (min-width: 900px) and (pointer: fine) {
+    .pred-cards-row { flex-direction: row; gap: 16px; align-items: flex-start; }
+    .pred-cards-row > .pred-card { flex: 1 1 0; min-width: 0; }
+  }
+  .pred-card { padding: 16px 18px; }
+  .pred-card .pred-section { margin-bottom: 20px; }
+  .pred-card .pred-section:last-child { margin-bottom: 0; }
+  .pred-card .pred-head { font-weight: 800; font-size: 14px; margin: 0 0 1px; display: flex; align-items: center; gap: 7px; }
+  .pred-card .pred-chevron { display: none; font-size: 10px; color: #aaa; transition: transform .15s ease; }
+  /* Collapsible only on touch devices (phones/tablets, either orientation). Desktop (fine
+     pointer) always shows everything and the chevron stays hidden. */
+  @media (pointer: coarse) {
+    .pred-card .pred-head { cursor: pointer; user-select: none; }
+    .pred-card .pred-chevron { display: inline-block; }
+    .pred-card .pred-section.collapsed .pred-chevron { transform: rotate(-90deg); }
+    .pred-card .pred-section.collapsed .pred-body { display: none; }
+  }
+  .pred-card .pred-sub { font-size: 12px; color: #888; margin: 0 0 9px; }
+  .pred-card .pred-sub b { color: #333; font-variant-numeric: tabular-nums; }
+  .pred-card .pred-sub .pred-proj { color: #1b66c9; }
+  /* Match the main leaderboard's table styling (header bar, padding, borders). */
+  table.pred-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.pred-table th, table.pred-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  table.pred-table th { background: #fafbfc; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: #555; }
+  table.pred-table th.num, table.pred-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.pred-table td.pred-rank { color: #bbb; width: 1%; white-space: nowrap; }
+  table.pred-table tr.pred-closest td { background: var(--green-bg); font-weight: 700; }
+  .pred-over  { color: #e05555; }
+  .pred-under { color: #3a82d6; }
+  .pred-zero  { color: #22a855; font-weight: 700; }
+  .pred-tag   { font-size: 11px; margin-left: 5px; }
+  /* Provisional bonus column: who'd score the +20/+5 if the projection held. All "pending"
+     because nothing's awarded until every fixture is resolved. */
+  .pred-bonus   { font-weight: 700; color: #b8860b; }
+  .pred-pending { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: #b0b0b0; margin-left: 5px; }
+  .pred-miss    { color: #ccc; }
+  .pred-foot    { font-size: 11px; color: #999; margin-top: 8px; }
+  td.results-only-note { color: #999; font-style: italic; font-size: 12px; }
+  tr.results-only-row td.col-fixture { font-weight: 600; }
   /* Bonus Rules tab reuses table.games for the same font/border/header look as the matchweek
      tables, but it's a plain 3-column reference list, not a wide player grid -- override the
      sticky-pinned-first-column/single-line-nowrap/fixed-190px-width assumptions that make sense for
@@ -571,8 +616,13 @@
     .col-correct { display: none; }
     .mw-stat-badge { display: none; }
     .rank-move { font-size: 10px; width: 26px; }
-    table.leaderboard th, table.leaderboard td { padding: 6px 8px; }
+    table.leaderboard th, table.leaderboard td,
+    table.pred-table th, table.pred-table td { padding: 6px 8px; }
     table.leaderboard td.col-player-lb { padding-left: 38px; }
+    /* Narrow phones: drop the per-row "pending" word (the footnote already says it) so the
+       Bonus points column always fits and never gets clipped by the card's overflow:hidden. */
+    .pred-pending { display: none; }
+    table.pred-table th, table.pred-table td { padding: 6px 6px; }
     #compact-fixture-banner .fixture-note { font-size: 10px; }
   }
   #next-fixture-card .table-scroll { padding-bottom: 0; }
@@ -639,6 +689,11 @@
     </table>
   </div>
 
+  <div class="pred-cards-row">
+    <div class="card pred-card" id="goals-pred-card"></div>
+    <div class="card pred-card" id="cards-pred-card"></div>
+  </div>
+
   <div class="card">
     <div class="tabs" id="tabs"></div>
     <div class="toolbar" style="border-top: none;">
@@ -682,6 +737,31 @@
 
 <script>
 const DATA = {"players":["Fred + Teilo","Rhodri B","Rhodri W","Llion","Nick B","Ant","Lane","Gwil","Matt","Liam B","Gaz T","Guto","Gaz E","Trystan H","Nick S","Dan D","🤖"],"matchweeks":[{"name":"Matchweek 1","fixtures":[{"home":"Mexico","away":"South Africa","actual":{"h":2,"a":0},"predictions":{"Fred + Teilo":{"h":2,"a":1,"stake":12},"Rhodri B":{"h":3,"a":0,"stake":12},"Rhodri W":{"h":2,"a":0,"stake":10},"Llion":{"h":2,"a":0,"stake":6},"Nick B":{"h":3,"a":1,"stake":24},"Ant":{"h":2,"a":1,"stake":14},"Lane":{"h":2,"a":0,"stake":15},"Gwil":{"h":2,"a":0,"stake":17},"Matt":{"h":2,"a":1,"stake":15},"Liam B":{"h":3,"a":1,"stake":17},"Gaz T":{"h":2,"a":0,"stake":18},"Guto":{"h":3,"a":1,"stake":11},"Gaz E":{"h":2,"a":1,"stake":14},"Trystan H":{"h":3,"a":1,"stake":23},"Nick S":{"h":2,"a":0,"stake":15},"Dan D":{"h":3,"a":1,"stake":18},"🤖":{"h":2,"a":0,"stake":21}},"kickoff":"2026-06-11T19:00:00Z"},{"home":"Korea Republic","away":"Czechia","actual":{"h":2,"a":1},"predictions":{"Fred + Teilo":{"h":1,"a":1,"stake":3},"Rhodri B":{"h":1,"a":2,"stake":20},"Rhodri W":{"h":1,"a":1,"stake":1},"Llion":{"h":1,"a":2,"stake":7},"Nick B":{"h":2,"a":0,"stake":7},"Ant":{"h":1,"a":1,"stake":2},"Lane":{"h":1,"a":1,"stake":2},"Gwil":{"h":1,"a":2,"stake":4},"Matt":{"h":1,"a":1,"stake":4},"Liam B":{"h":1,"a":1,"stake":1},"Gaz T":{"h":2,"a":1,"stake":3},"Guto":{"h":2,"a":2,"stake":1},"Gaz E":{"h":1,"a":1,"stake":4},"Trystan H":{"h":1,"a":2,"stake":2},"Nick S":{"h":2,"a":1,"stake":10},"Dan D":{"h":1,"a":2,"stake":5},"🤖":{"h":1,"a":0,"stake":9}},"kickoff":"2026-06-12T02:00:00Z"},{"home":"Canada","away":"Bosnia and Herzegovina","actual":{"h":1,"a":1},"predictions":{"Fred + Teilo":{"h":1,"a":1,"stake":7},"Rhodri B":{"h":2,"a":0,"stake":15},"Rhodri W":{"h":2,"a":0,"stake":8},"Llion":{"h":0,"a":2,"stake":5},"Nick B":{"h":2,"a":1,"stake":8},"Ant":{"h":2,"a":1,"stake":22},"Lane":{"h":1,"a":0,"stake":3},"Gwil":{"h":1,"a":1,"stake":8},"Matt":{"h":1,"a":1,"stake":12},"Liam B":{"h":2,"a":0,"stake":5},"Gaz T":{"h":1,"a":0,"stake":6},"Guto":{"h":2,"a":1,"stake":12},"Gaz E":{"h":1,"a":0,"stake":5},"Trystan H":{"h":1,"a":2,"stake":6},"Nick S":{"h":1,"a":1,"stake":3},"Dan D":{"h":2,"a":2,"stake":3},"🤖":{"h":2,"a":1,"stake":16}},"kickoff":"2026-06-12T19:00:00Z"},{"home":"Switzerland","away":"Qatar","actual":{"h":1,"a":1},"predictions":{"Fred + Teilo":{"h":2,"a":0,"stake":11},"Rhodri B":{"h":1,"a":1,"stake":2},"Rhodri W":{"h":2,"a":0,"stake":11},"Llion":{"h":3,"a":0,"stake":16},"Nick B":{"h":3,"a":0,"stake":9},"Ant":{"h":3,"a":0,"stake":9},"Lane":{"h":3,"a":0,"stake":20},"Gwil":{"h":3,"a":1,"stake":16},"Matt":{"h":2,"a":0,"stake":10},"Liam B":{"h":3,"a":0,"stake":18},"Gaz T":{"h":2,"a":0,"stake":10},"Guto":{"h":3,"a":0,"stake":19},"Gaz E":{"h":3,"a":1,"stake":15},"Trystan H":{"h":2,"a":1,"stake":7},"Nick S":{"h":3,"a":0,"stake":20},"Dan D":{"h":3,"a":0,"stake":14},"🤖":{"h":2,"a":0,"stake":12}},"kickoff":"2026-06-13T19:00:00Z"},{"home":"Brazil","away":"Morocco","actual":{"h":1,"a":1},"predictions":{"Fred + Teilo":{"h":1,"a":1,"stake":8},"Rhodri B":{"h":2,"a":0,"stake":24},"Rhodri W":{"h":2,"a":2,"stake":2},"Llion":{"h":3,"a":1,"stake":17},"Nick B":{"h":3,"a":1,"stake":10},"Ant":{"h":2,"a":1,"stake":13},"Lane":{"h":1,"a":1,"stake":1},"Gwil":{"h":1,"a":1,"stake":2},"Matt":{"h":2,"a":1,"stake":8},"Liam B":{"h":2,"a":1,"stake":4},"Gaz T":{"h":3,"a":1,"stake":19},"Guto":{"h":4,"a":2,"stake":15},"Gaz E":{"h":1,"a":1,"stake":9},"Trystan H":{"h":4,"a":0,"stake":22},"Nick S":{"h":2,"a":1,"stake":4},"Dan D":{"h":3,"a":2,"stake":13},"🤖":{"h":1,"a":1,"stake":1}},"kickoff":"2026-06-13T22:00:00Z"},{"home":"Haiti","away":"Scotland","actual":{"h":0,"a":1},"predictions":{"Fred + Teilo":{"h":0,"a":3,"stake":18},"Rhodri B":{"h":0,"a":2,"stake":21},"Rhodri W":{"h":0,"a":2,"stake":13},"Llion":{"h":0,"a":2,"stake":12},"Nick B":{"h":0,"a":3,"stake":23},"Ant":{"h":0,"a":3,"stake":15},"Lane":{"h":0,"a":2,"stake":13},"Gwil":{"h":0,"a":3,"stake":23},"Matt":{"h":0,"a":2,"stake":17},"Liam B":{"h":0,"a":3,"stake":15},"Gaz T":{"h":0,"a":3,"stake":17},"Guto":{"h":0,"a":1,"stake":10},"Gaz E":{"h":0,"a":3,"stake":21},"Trystan H":{"h":0,"a":2,"stake":20},"Nick S":{"h":0,"a":2,"stake":18},"Dan D":{"h":0,"a":3,"stake":19},"🤖":{"h":0,"a":2,"stake":17}},"kickoff":"2026-06-14T01:00:00Z"},{"home":"United States","away":"Paraguay","actual":{"h":4,"a":1},"predictions":{"Fred + Teilo":{"h":2,"a":1,"stake":6},"Rhodri B":{"h":1,"a":0,"stake":16},"Rhodri W":{"h":2,"a":0,"stake":9},"Llion":{"h":2,"a":1,"stake":3},"Nick B":{"h":2,"a":1,"stake":14},"Ant":{"h":1,"a":0,"stake":8},"Lane":{"h":2,"a":1,"stake":5},"Gwil":{"h":1,"a":0,"stake":13},"Matt":{"h":2,"a":1,"stake":11},"Liam B":{"h":2,"a":0,"stake":9},"Gaz T":{"h":2,"a":1,"stake":4},"Guto":{"h":1,"a":0,"stake":3},"Gaz E":{"h":0,"a":0,"stake":8},"Trystan H":{"h":1,"a":2,"stake":11},"Nick S":{"h":1,"a":1,"stake":5},"Dan D":{"h":2,"a":1,"stake":7},"🤖":{"h":2,"a":1,"stake":8}},"kickoff":"2026-06-13T01:00:00Z"},{"home":"Australia","away":"Türkiye","actual":{"h":2,"a":0},"predictions":{"Fred + Teilo":{"h":0,"a":2,"stake":14},"Rhodri B":{"h":0,"a":0,"stake":10},"Rhodri W":{"h":1,"a":2,"stake":6},"Llion":{"h":0,"a":2,"stake":18},"Nick B":{"h":1,"a":3,"stake":13},"Ant":{"h":1,"a":4,"stake":16},"Lane":{"h":0,"a":2,"stake":14},"Gwil":{"h":0,"a":2,"stake":14},"Matt":{"h":1,"a":2,"stake":7},"Liam B":{"h":0,"a":2,"stake":14},"Gaz T":{"h":1,"a":1,"stake":1},"Guto":{"h":2,"a":3,"stake":13},"Gaz E":{"h":1,"a":2,"stake":1},"Trystan H":{"h":1,"a":2,"stake":8},"Nick S":{"h":1,"a":2,"stake":6},"Dan D":{"h":0,"a":2,"stake":11},"🤖":{"h":1,"a":1,"stake":2}},"kickoff":"2026-06-14T04:00:00Z"},{"home":"Germany","away":"Curaçao","actual":{"h":7,"a":1},"predictions":{"Fred + Teilo":{"h":5,"a":0,"stake":24},"Rhodri B":{"h":3,"a":0,"stake":23},"Rhodri W":{"h":4,"a":0,"stake":23},"Llion":{"h":4,"a":0,"stake":21},"Nick B":{"h":5,"a":0,"stake":22},"Ant":{"h":5,"a":0,"stake":23},"Lane":{"h":4,"a":0,"stake":23},"Gwil":{"h":4,"a":0,"stake":24},"Matt":{"h":4,"a":0,"stake":24},"Liam B":{"h":5,"a":0,"stake":24},"Gaz T":{"h":6,"a":0,"stake":22},"Guto":{"h":4,"a":0,"stake":22},"Gaz E":{"h":5,"a":0,"stake":23},"Trystan H":{"h":2,"a":0,"stake":19},"Nick S":{"h":4,"a":0,"stake":24},"Dan D":{"h":7,"a":0,"stake":24},"🤖":{"h":3,"a":0,"stake":24}},"kickoff":"2026-06-14T17:00:00Z"},{"home":"Côte d'Ivoire","away":"Ecuador","actual":{"h":1,"a":0},"predictions":{"Fred + Teilo":{"h":2,"a":1,"stake":4},"Rhodri B":{"h":0,"a":2,"stake":11},"Rhodri W":{"h":1,"a":1,"stake":3},"Llion":{"h":2,"a":2,"stake":1},"Nick B":{"h":2,"a":2,"stake":1},"Ant":{"h":2,"a":0,"stake":7},"Lane":{"h":0,"a":1,"stake":4},"Gwil":{"h":2,"a":2,"stake":1},"Matt":{"h":1,"a":1,"stake":2},"Liam B":{"h":1,"a":2,"stake":3},"Gaz T":{"h":2,"a":0,"stake":16},"Guto":{"h":2,"a":1,"stake":4},"Gaz E":{"h":2,"a":2,"stake":6},"Trystan H":{"h":2,"a":1,"stake":9},"Nick S":{"h":1,"a":2,"stake":7},"Dan D":{"h":1,"a":1,"stake":4},"🤖":{"h":0,"a":1,"stake":6}},"kickoff":"2026-06-14T23:00:00Z"},{"home":"Netherlands","away":"Japan","actual":{"h":2,"a":2},"predictions":{"Fred + Teilo":{"h":2,"a":1,"stake":16},"Rhodri B":{"h":2,"a":1,"stake":13},"Rhodri W":{"h":2,"a":0,"stake":15},"Llion":{"h":2,"a":1,"stake":13},"Nick B":{"h":2,"a":2,"stake":2},"Ant":{"h":2,"a":2,"stake":4},"Lane":{"h":2,"a":1,"stake":6},"Gwil":{"h":1,"a":1,"stake":11},"Matt":{"h":2,"a":1,"stake":6},"Liam B":{"h":2,"a":2,"stake":2},"Gaz T":{"h":2,"a":1,"stake":11},"Guto":{"h":3,"a":1,"stake":16},"Gaz E":{"h":3,"a":1,"stake":16},"Trystan H":{"h":2,"a":1,"stake":3},"Nick S":{"h":1,"a":1,"stake":1},"Dan D":{"h":3,"a":1,"stake":17},"🤖":{"h":1,"a":1,"stake":3}},"kickoff":"2026-06-14T20:00:00Z"},{"home":"Tunisia","away":"Sweden","actual":{"h":1,"a":5},"predictions":{"Fred + Teilo":{"h":0,"a":0,"stake":1},"Rhodri B":{"h":2,"a":2,"stake":4},"Rhodri W":{"h":1,"a":2,"stake":5},"Llion":{"h":0,"a":2,"stake":11},"Nick B":{"h":1,"a":1,"stake":3},"Ant":{"h":1,"a":0,"stake":6},"Lane":{"h":0,"a":1,"stake":7},"Gwil":{"h":1,"a":2,"stake":7},"Matt":{"h":0,"a":1,"stake":3},"Liam B":{"h":2,"a":1,"stake":6},"Gaz T":{"h":1,"a":1,"stake":2},"Guto":{"h":0,"a":2,"stake":14},"Gaz E":{"h":0,"a":2,"stake":7},"Trystan H":{"h":0,"a":2,"stake":4},"Nick S":{"h":1,"a":2,"stake":8},"Dan D":{"h":0,"a":2,"stake":10},"🤖":{"h":0,"a":1,"stake":4}},"kickoff":"2026-06-15T02:00:00Z"},{"home":"Belgium","away":"Egypt","actual":{"h":1,"a":1},"predictions":{"Fred + Teilo":{"h":2,"a":1,"stake":10},"Rhodri B":{"h":3,"a":0,"stake":22},"Rhodri W":{"h":2,"a":1,"stake":12},"Llion":{"h":3,"a":1,"stake":14},"Nick B":{"h":1,"a":1,"stake":11},"Ant":{"h":1,"a":1,"stake":3},"Lane":{"h":2,"a":1,"stake":10},"Gwil":{"h":2,"a":1,"stake":18},"Matt":{"h":2,"a":1,"stake":9},"Liam B":{"h":3,"a":1,"stake":10},"Gaz T":{"h":2,"a":1,"stake":7},"Guto":{"h":4,"a":2,"stake":17},"Gaz E":{"h":3,"a":1,"stake":17},"Trystan H":{"h":3,"a":1,"stake":5},"Nick S":{"h":2,"a":1,"stake":2},"Dan D":{"h":4,"a":2,"stake":16},"🤖":{"h":2,"a":1,"stake":10}},"kickoff":"2026-06-15T19:00:00Z"},{"home":"IR Iran","away":"New Zealand","actual":{"h":2,"a":2},"predictions":{"Fred + Teilo":{"h":1,"a":0,"stake":5},"Rhodri B":{"h":0,"a":1,"stake":9},"Rhodri W":{"h":1,"a":0,"stake":7},"Llion":{"h":2,"a":0,"stake":2},"Nick B":{"h":2,"a":0,"stake":4},"Ant":{"h":1,"a":0,"stake":5},"Lane":{"h":2,"a":0,"stake":16},"Gwil":{"h":1,"a":1,"stake":5},"Matt":{"h":2,"a":0,"stake":16},"Liam B":{"h":2,"a":1,"stake":11},"Gaz T":{"h":1,"a":0,"stake":5},"Guto":{"h":1,"a":1,"stake":2},"Gaz E":{"h":1,"a":1,"stake":2},"Trystan H":{"h":1,"a":2,"stake":12},"Nick S":{"h":3,"a":1,"stake":12},"Dan D":{"h":0,"a":1,"stake":1},"🤖":{"h":2,"a":0,"stake":23}},"kickoff":"2026-06-16T01:00:00Z"},{"home":"Spain","away":"Cabo Verde","actual":{"h":0,"a":0},"predictions":{"Fred + Teilo":{"h":6,"a":0,"stake":23},"Rhodri B":{"h":3,"a":0,"stake":19},"Rhodri W":{"h":4,"a":0,"stake":24},"Llion":{"h":4,"a":0,"stake":23},"Nick B":{"h":3,"a":0,"stake":21},"Ant":{"h":4,"a":0,"stake":24},"Lane":{"h":4,"a":0,"stake":24},"Gwil":{"h":3,"a":0,"stake":20},"Matt":{"h":3,"a":0,"stake":23},"Liam B":{"h":4,"a":0,"stake":22},"Gaz T":{"h":5,"a":0,"stake":24},"Guto":{"h":6,"a":0,"stake":24},"Gaz E":{"h":6,"a":0,"stake":24},"Trystan H":{"h":4,"a":0,"stake":17},"Nick S":{"h":4,"a":0,"stake":23},"Dan D":{"h":6,"a":1,"stake":23},"🤖":{"h":3,"a":0,"stake":22}},"kickoff":"2026-06-15T16:00:00Z"},{"home":"Saudi Arabia","away":"Uruguay","actual":{"h":1,"a":1},"predictions":{"Fred + Teilo":{"h":1,"a":3,"stake":13},"Rhodri B":{"h":1,"a":3,"stake":7},"Rhodri W":{"h":0,"a":2,"stake":19},"Llion":{"h":1,"a":2,"stake":10},"Nick B":{"h":1,"a":2,"stake":12},"Ant":{"h":1,"a":3,"stake":12},"Lane":{"h":0,"a":2,"stake":21},"Gwil":{"h":1,"a":2,"stake":6},"Matt":{"h":0,"a":2,"stake":18},"Liam B":{"h":1,"a":3,"stake":19},"Gaz T":{"h":0,"a":2,"stake":12},"Guto":{"h":1,"a":2,"stake":5},"Gaz E":{"h":0,"a":2,"stake":18},"Trystan H":{"h":0,"a":3,"stake":18},"Nick S":{"h":1,"a":2,"stake":14},"Dan D":{"h":0,"a":2,"stake":8},"🤖":{"h":0,"a":2,"stake":20}},"kickoff":"2026-06-15T22:00:00Z"},{"home":"France","away":"Senegal","actual":{"h":3,"a":1},"predictions":{"Fred + Teilo":{"h":3,"a":1,"stake":21},"Rhodri B":{"h":4,"a":0,"stake":18},"Rhodri W":{"h":2,"a":0,"stake":20},"Llion":{"h":3,"a":1,"stake":20},"Nick B":{"h":2,"a":0,"stake":17},"Ant":{"h":3,"a":1,"stake":19},"Lane":{"h":2,"a":1,"stake":9},"Gwil":{"h":1,"a":0,"stake":12},"Matt":{"h":2,"a":1,"stake":13},"Liam B":{"h":3,"a":0,"stake":16},"Gaz T":{"h":2,"a":1,"stake":15},"Guto":{"h":3,"a":1,"stake":20},"Gaz E":{"h":4,"a":1,"stake":22},"Trystan H":{"h":3,"a":1,"stake":16},"Nick S":{"h":2,"a":0,"stake":13},"Dan D":{"h":3,"a":0,"stake":22},"🤖":{"h":2,"a":1,"stake":7}},"kickoff":"2026-06-16T19:00:00Z"},{"home":"Norway","away":"Iraq","actual":{"h":4,"a":1},"predictions":{"Fred + Teilo":{"h":2,"a":0,"stake":20},"Rhodri B":{"h":2,"a":0,"stake":14},"Rhodri W":{"h":3,"a":1,"stake":18},"Llion":{"h":2,"a":0,"stake":15},"Nick B":{"h":3,"a":0,"stake":18},"Ant":{"h":2,"a":0,"stake":18},"Lane":{"h":2,"a":0,"stake":19},"Gwil":{"h":2,"a":0,"stake":19},"Matt":{"h":2,"a":0,"stake":19},"Liam B":{"h":3,"a":1,"stake":21},"Gaz T":{"h":2,"a":0,"stake":9},"Guto":{"h":3,"a":2,"stake":8},"Gaz E":{"h":2,"a":0,"stake":10},"Trystan H":{"h":3,"a":0,"stake":13},"Nick S":{"h":2,"a":1,"stake":17},"Dan D":{"h":2,"a":0,"stake":15},"🤖":{"h":2,"a":0,"stake":14}},"kickoff":"2026-06-16T22:00:00Z"},{"home":"Argentina","away":"Algeria","actual":{"h":3,"a":0},"predictions":{"Fred + Teilo":{"h":2,"a":1,"stake":19},"Rhodri B":{"h":2,"a":0,"stake":17},"Rhodri W":{"h":3,"a":0,"stake":22},"Llion":{"h":3,"a":0,"stake":22},"Nick B":{"h":2,"a":0,"stake":19},"Ant":{"h":2,"a":1,"stake":11},"Lane":{"h":1,"a":0,"stake":8},"Gwil":{"h":2,"a":0,"stake":10},"Matt":{"h":3,"a":0,"stake":22},"Liam B":{"h":2,"a":1,"stake":7},"Gaz T":{"h":3,"a":1,"stake":20},"Guto":{"h":4,"a":1,"stake":21},"Gaz E":{"h":3,"a":1,"stake":3},"Trystan H":{"h":4,"a":0,"stake":24},"Nick S":{"h":3,"a":0,"stake":21},"Dan D":{"h":4,"a":0,"stake":21},"🤖":{"h":2,"a":0,"stake":11}},"kickoff":"2026-06-17T01:00:00Z"},{"home":"Austria","away":"Jordan","actual":{"h":3,"a":1},"predictions":{"Fred + Teilo":{"h":3,"a":0,"stake":15},"Rhodri B":{"h":1,"a":0,"stake":3},"Rhodri W":{"h":2,"a":0,"stake":14},"Llion":{"h":2,"a":0,"stake":19},"Nick B":{"h":2,"a":1,"stake":5},"Ant":{"h":3,"a":0,"stake":20},"Lane":{"h":2,"a":0,"stake":18},"Gwil":{"h":3,"a":0,"stake":22},"Matt":{"h":2,"a":0,"stake":20},"Liam B":{"h":2,"a":0,"stake":12},"Gaz T":{"h":2,"a":0,"stake":14},"Guto":{"h":2,"a":0,"stake":18},"Gaz E":{"h":3,"a":0,"stake":19},"Trystan H":{"h":3,"a":0,"stake":10},"Nick S":{"h":2,"a":0,"stake":19},"Dan D":{"h":2,"a":0,"stake":9},"🤖":{"h":2,"a":0,"stake":18}},"kickoff":"2026-06-17T04:00:00Z"},{"home":"Portugal","away":"Congo DR","actual":{"h":1,"a":1},"predictions":{"Fred + Teilo":{"h":4,"a":0,"stake":22},"Rhodri B":{"h":2,"a":0,"stake":6},"Rhodri W":{"h":3,"a":0,"stake":21},"Llion":{"h":4,"a":0,"stake":24},"Nick B":{"h":4,"a":0,"stake":20},"Ant":{"h":2,"a":2,"stake":21},"Lane":{"h":3,"a":0,"stake":22},"Gwil":{"h":2,"a":0,"stake":21},"Matt":{"h":3,"a":0,"stake":21},"Liam B":{"h":4,"a":0,"stake":23},"Gaz T":{"h":4,"a":0,"stake":23},"Guto":{"h":5,"a":0,"stake":23},"Gaz E":{"h":4,"a":0,"stake":20},"Trystan H":{"h":3,"a":0,"stake":15},"Nick S":{"h":4,"a":0,"stake":16},"Dan D":{"h":3,"a":0,"stake":20},"🤖":{"h":2,"a":0,"stake":19}},"kickoff":"2026-06-17T17:00:00Z"},{"home":"Colombia","away":"Uzbekistan","actual":{"h":3,"a":1},"predictions":{"Fred + Teilo":{"h":1,"a":0,"stake":9},"Rhodri B":{"h":1,"a":1,"stake":5},"Rhodri W":{"h":2,"a":0,"stake":16},"Llion":{"h":2,"a":0,"stake":4},"Nick B":{"h":2,"a":0,"stake":16},"Ant":{"h":2,"a":1,"stake":1},"Lane":{"h":2,"a":0,"stake":17},"Gwil":{"h":2,"a":1,"stake":15},"Matt":{"h":2,"a":1,"stake":14},"Liam B":{"h":3,"a":0,"stake":20},"Gaz T":{"h":3,"a":1,"stake":21},"Guto":{"h":3,"a":2,"stake":6},"Gaz E":{"h":3,"a":0,"stake":11},"Trystan H":{"h":2,"a":0,"stake":21},"Nick S":{"h":3,"a":0,"stake":22},"Dan D":{"h":2,"a":1,"stake":6},"🤖":{"h":2,"a":1,"stake":13}},"kickoff":"2026-06-18T02:00:00Z"},{"home":"England","away":"Croatia","actual":{"h":4,"a":2},"predictions":{"Fred + Teilo":{"h":3,"a":1,"stake":17},"Rhodri B":{"h":2,"a":1,"stake":8},"Rhodri W":{"h":2,"a":1,"stake":17},"Llion":{"h":2,"a":1,"stake":8},"Nick B":{"h":2,"a":1,"stake":6},"Ant":{"h":2,"a":1,"stake":17},"Lane":{"h":2,"a":0,"stake":12},"Gwil":{"h":2,"a":0,"stake":9},"Matt":{"h":2,"a":1,"stake":5},"Liam B":{"h":2,"a":0,"stake":13},"Gaz T":{"h":2,"a":1,"stake":13},"Guto":{"h":2,"a":1,"stake":7},"Gaz E":{"h":2,"a":1,"stake":13},"Trystan H":{"h":1,"a":2,"stake":1},"Nick S":{"h":1,"a":1,"stake":9},"Dan D":{"h":2,"a":1,"stake":12},"🤖":{"h":1,"a":1,"stake":5}},"kickoff":"2026-06-17T20:00:00Z"},{"home":"Ghana","away":"Panama","actual":{"h":1,"a":0},"predictions":{"Fred + Teilo":{"h":1,"a":1,"stake":2},"Rhodri B":{"h":1,"a":1,"stake":1},"Rhodri W":{"h":2,"a":1,"stake":4},"Llion":{"h":2,"a":0,"stake":9},"Nick B":{"h":3,"a":1,"stake":15},"Ant":{"h":2,"a":0,"stake":10},"Lane":{"h":2,"a":1,"stake":11},"Gwil":{"h":2,"a":0,"stake":3},"Matt":{"h":1,"a":1,"stake":1},"Liam B":{"h":2,"a":0,"stake":8},"Gaz T":{"h":2,"a":0,"stake":8},"Guto":{"h":2,"a":1,"stake":9},"Gaz E":{"h":2,"a":0,"stake":12},"Trystan H":{"h":2,"a":0,"stake":14},"Nick S":{"h":2,"a":1,"stake":11},"Dan D":{"h":1,"a":1,"stake":2},"🤖":{"h":1,"a":2,"stake":15}},"kickoff":"2026-06-17T23:00:00Z"}]},{"name":"Matchweek 2","fixtures":[{"home":"Mexico","away":"South Korea","actual":{"h":1,"a":0},"predictions":{"Fred + Teilo":{"h":1,"a":1,"stake":2},"Rhodri B":{"h":1,"a":1,"stake":10},"Rhodri W":{"h":2,"a":1,"stake":5},"Llion":{"h":2,"a":2,"stake":5},"Nick B":{"h":2,"a":1,"stake":3},"Ant":{"h":1,"a":1,"stake":6},"Lane":{"h":1,"a":0,"stake":3},"Gwil":{"h":1,"a":2,"stake":4},"Matt":{"h":2,"a":1,"stake":8},"Liam B":{"h":2,"a":1,"stake":2},"Gaz T":{"h":2,"a":1,"stake":3},"Guto":{"h":2,"a":2,"stake":2},"Gaz E":{"h":1,"a":1,"stake":9},"Trystan H":{"h":1,"a":2,"stake":3},"Nick S":{"h":2,"a":2,"stake":5},"Dan D":{"h":1,"a":2,"stake":2},"🤖":{"h":2,"a":1,"stake":15}},"kickoff":"2026-06-19T01:00:00Z"},{"home":"South Africa","away":"Czechia","actual":{"h":1,"a":1},"predictions":{"Fred + Teilo":{"h":0,"a":1,"stake":9},"Rhodri B":{"h":0,"a":0,"stake":8},"Rhodri W":{"h":0,"a":2,"stake":14},"Llion":{"h":0,"a":2,"stake":14},"Nick B":{"h":1,"a":1,"stake":1},"Ant":{"h":0,"a":2,"stake":5},"Lane":{"h":0,"a":2,"stake":8},"Gwil":{"h":0,"a":2,"stake":15},"Matt":{"h":1,"a":1,"stake":1},"Liam B":{"h":1,"a":2,"stake":3},"Gaz T":{"h":0,"a":1,"stake":4},"Guto":{"h":0,"a":2,"stake":18},"Gaz E":{"h":1,"a":2,"stake":12},"Trystan H":{"h":1,"a":3,"stake":12},"Nick S":{"h":1,"a":2,"stake":4},"Dan D":{"h":0,"a":2,"stake":5},"🤖":{"h":0,"a":1,"stake":10}},"kickoff":"2026-06-18T16:00:00Z"},{"home":"Canada","away":"Qatar","actual":{"h":6,"a":0},"predictions":{"Fred + Teilo":{"h":2,"a":1,"stake":8},"Rhodri B":{"h":2,"a":0,"stake":9},"Rhodri W":{"h":2,"a":1,"stake":7},"Llion":{"h":2,"a":1,"stake":9},"Nick B":{"h":3,"a":0,"stake":12},"Ant":{"h":1,"a":0,"stake":12},"Lane":{"h":2,"a":0,"stake":9},"Gwil":{"h":3,"a":0,"stake":23},"Matt":{"h":2,"a":1,"stake":11},"Liam B":{"h":2,"a":0,"stake":11},"Gaz T":{"h":2,"a":0,"stake":11},"Guto":{"h":2,"a":1,"stake":4},"Gaz E":{"h":2,"a":1,"stake":8},"Trystan H":{"h":2,"a":0,"stake":4},"Nick S":{"h":2,"a":0,"stake":7},"Dan D":{"h":2,"a":1,"stake":4},"🤖":{"h":2,"a":1,"stake":5}},"kickoff":"2026-06-18T22:00:00Z"},{"home":"Switzerland","away":"Bosnia and Herzegovina","actual":{"h":4,"a":1},"predictions":{"Fred + Teilo":{"h":1,"a":0,"stake":7},"Rhodri B":{"h":1,"a":2,"stake":2},"Rhodri W":{"h":1,"a":1,"stake":3},"Llion":{"h":2,"a":1,"stake":10},"Nick B":{"h":2,"a":1,"stake":9},"Ant":{"h":1,"a":2,"stake":2},"Lane":{"h":2,"a":1,"stake":7},"Gwil":{"h":1,"a":0,"stake":9},"Matt":{"h":2,"a":1,"stake":5},"Liam B":{"h":2,"a":0,"stake":8},"Gaz T":{"h":3,"a":1,"stake":10},"Guto":{"h":2,"a":1,"stake":3},"Gaz E":{"h":0,"a":0,"stake":1},"Trystan H":{"h":2,"a":1,"stake":5},"Nick S":{"h":1,"a":1,"stake":3},"Dan D":{"h":2,"a":0,"stake":12},"🤖":{"h":2,"a":0,"stake":16}},"kickoff":"2026-06-18T19:00:00Z"},{"home":"Brazil","away":"Haiti","actual":{"h":3,"a":0},"predictions":{"Fred + Teilo":{"h":3,"a":0,"stake":24},"Rhodri B":{"h":3,"a":0,"stake":21},"Rhodri W":{"h":3,"a":0,"stake":22},"Llion":{"h":3,"a":0,"stake":23},"Nick B":{"h":6,"a":0,"stake":24},"Ant":{"h":3,"a":0,"stake":24},"Lane":{"h":4,"a":0,"stake":21},"Gwil":{"h":5,"a":0,"stake":24},"Matt":{"h":4,"a":0,"stake":23},"Liam B":{"h":4,"a":0,"stake":24},"Gaz T":{"h":4,"a":0,"stake":24},"Guto":{"h":4,"a":0,"stake":23},"Gaz E":{"h":6,"a":0,"stake":14},"Trystan H":{"h":5,"a":0,"stake":24},"Nick S":{"h":3,"a":0,"stake":21},"Dan D":{"h":4,"a":0,"stake":23},"🤖":{"h":3,"a":0,"stake":24}},"kickoff":"2026-06-20T00:30:00Z"},{"home":"Morocco","away":"Scotland","actual":{"h":1,"a":0},"predictions":{"Fred + Teilo":{"h":2,"a":0,"stake":16},"Rhodri B":{"h":2,"a":0,"stake":20},"Rhodri W":{"h":3,"a":1,"stake":17},"Llion":{"h":2,"a":0,"stake":20},"Nick B":{"h":2,"a":1,"stake":11},"Ant":{"h":2,"a":0,"stake":13},"Lane":{"h":2,"a":0,"stake":17},"Gwil":{"h":2,"a":0,"stake":6},"Matt":{"h":2,"a":1,"stake":12},"Liam B":{"h":2,"a":0,"stake":9},"Gaz T":{"h":2,"a":1,"stake":15},"Guto":{"h":3,"a":1,"stake":19},"Gaz E":{"h":3,"a":1,"stake":13},"Trystan H":{"h":1,"a":2,"stake":11},"Nick S":{"h":2,"a":1,"stake":9},"Dan D":{"h":3,"a":1,"stake":10},"🤖":{"h":2,"a":1,"stake":8}},"kickoff":"2026-06-19T22:00:00Z"},{"home":"United States","away":"Australia","actual":{"h":2,"a":0},"predictions":{"Fred + Teilo":{"h":2,"a":0,"stake":10},"Rhodri B":{"h":2,"a":1,"stake":17},"Rhodri W":{"h":2,"a":2,"stake":1},"Llion":{"h":3,"a":1,"stake":16},"Nick B":{"h":3,"a":1,"stake":8},"Ant":{"h":3,"a":2,"stake":16},"Lane":{"h":2,"a":0,"stake":11},"Gwil":{"h":3,"a":0,"stake":7},"Matt":{"h":2,"a":1,"stake":13},"Liam B":{"h":2,"a":1,"stake":4},"Gaz T":{"h":2,"a":1,"stake":6},"Guto":{"h":2,"a":1,"stake":9},"Gaz E":{"h":3,"a":0,"stake":4},"Trystan H":{"h":2,"a":1,"stake":7},"Nick S":{"h":3,"a":1,"stake":16},"Dan D":{"h":2,"a":0,"stake":11},"🤖":{"h":2,"a":1,"stake":14}},"kickoff":"2026-06-19T19:00:00Z"},{"home":"Paraguay","away":"Türkiye","actual":{"h":1,"a":0},"predictions":{"Fred + Teilo":{"h":1,"a":2,"stake":6},"Rhodri B":{"h":0,"a":3,"stake":18},"Rhodri W":{"h":1,"a":1,"stake":2},"Llion":{"h":1,"a":2,"stake":12},"Nick B":{"h":1,"a":2,"stake":6},"Ant":{"h":0,"a":2,"stake":8},"Lane":{"h":1,"a":1,"stake":2},"Gwil":{"h":1,"a":3,"stake":11},"Matt":{"h":1,"a":1,"stake":2},"Liam B":{"h":1,"a":2,"stake":6},"Gaz T":{"h":0,"a":2,"stake":2},"Guto":{"h":1,"a":2,"stake":5},"Gaz E":{"h":1,"a":1,"stake":11},"Trystan H":{"h":0,"a":2,"stake":9},"Nick S":{"h":1,"a":1,"stake":6},"Dan D":{"h":1,"a":3,"stake":9},"🤖":{"h":1,"a":1,"stake":2}},"kickoff":"2026-06-20T03:00:00Z"},{"home":"Germany","away":"Côte d'Ivoire","actual":{"h":2,"a":1},"predictions":{"Fred + Teilo":{"h":2,"a":1,"stake":18},"Rhodri B":{"h":4,"a":0,"stake":24},"Rhodri W":{"h":3,"a":1,"stake":18},"Llion":{"h":3,"a":1,"stake":19},"Nick B":{"h":3,"a":1,"stake":13},"Ant":{"h":2,"a":1,"stake":7},"Lane":{"h":2,"a":1,"stake":12},"Gwil":{"h":2,"a":0,"stake":8},"Matt":{"h":3,"a":1,"stake":21},"Liam B":{"h":3,"a":1,"stake":5},"Gaz T":{"h":3,"a":1,"stake":12},"Guto":{"h":4,"a":2,"stake":14},"Gaz E":{"h":3,"a":0,"stake":24},"Trystan H":{"h":3,"a":0,"stake":22},"Nick S":{"h":3,"a":1,"stake":8},"Dan D":{"h":3,"a":1,"stake":19},"🤖":{"h":2,"a":0,"stake":18}},"kickoff":"2026-06-20T20:00:00Z"},{"home":"Curaçao","away":"Ecuador","actual":{"h":0,"a":0},"predictions":{"Fred + Teilo":{"h":0,"a":2,"stake":11},"Rhodri B":{"h":1,"a":1,"stake":1},"Rhodri W":{"h":0,"a":2,"stake":16},"Llion":{"h":0,"a":2,"stake":13},"Nick B":{"h":1,"a":3,"stake":15},"Ant":{"h":0,"a":4,"stake":23},"Lane":{"h":0,"a":2,"stake":13},"Gwil":{"h":1,"a":1,"stake":1},"Matt":{"h":0,"a":3,"stake":22},"Liam B":{"h":0,"a":4,"stake":23},"Gaz T":{"h":1,"a":2,"stake":16},"Guto":{"h":0,"a":3,"stake":20},"Gaz E":{"h":0,"a":3,"stake":10},"Trystan H":{"h":0,"a":2,"stake":13},"Nick S":{"h":0,"a":3,"stake":14},"Dan D":{"h":0,"a":2,"stake":8},"🤖":{"h":0,"a":2,"stake":13}},"kickoff":"2026-06-21T00:00:00Z"},{"home":"Netherlands","away":"Sweden","actual":{"h":5,"a":1},"predictions":{"Fred + Teilo":{"h":2,"a":2,"stake":3},"Rhodri B":{"h":2,"a":1,"stake":12},"Rhodri W":{"h":1,"a":1,"stake":4},"Llion":{"h":2,"a":2,"stake":11},"Nick B":{"h":2,"a":2,"stake":2},"Ant":{"h":2,"a":2,"stake":1},"Lane":{"h":1,"a":1,"stake":1},"Gwil":{"h":2,"a":2,"stake":3},"Matt":{"h":2,"a":1,"stake":4},"Liam B":{"h":2,"a":0,"stake":7},"Gaz T":{"h":2,"a":1,"stake":5},"Guto":{"h":3,"a":2,"stake":6},"Gaz E":{"h":2,"a":2,"stake":3},"Trystan H":{"h":3,"a":1,"stake":19},"Nick S":{"h":2,"a":1,"stake":13},"Dan D":{"h":2,"a":1,"stake":7},"🤖":{"h":1,"a":1,"stake":3}},"kickoff":"2026-06-20T17:00:00Z"},{"home":"Japan","away":"Tunisia","actual":{"h":4,"a":0},"predictions":{"Fred + Teilo":{"h":2,"a":0,"stake":15},"Rhodri B":{"h":0,"a":1,"stake":13},"Rhodri W":{"h":2,"a":0,"stake":15},"Llion":{"h":2,"a":0,"stake":17},"Nick B":{"h":3,"a":1,"stake":7},"Ant":{"h":3,"a":1,"stake":15},"Lane":{"h":3,"a":0,"stake":10},"Gwil":{"h":4,"a":0,"stake":18},"Matt":{"h":2,"a":0,"stake":19},"Liam B":{"h":3,"a":1,"stake":10},"Gaz T":{"h":1,"a":0,"stake":8},"Guto":{"h":3,"a":1,"stake":11},"Gaz E":{"h":3,"a":1,"stake":19},"Trystan H":{"h":2,"a":0,"stake":8},"Nick S":{"h":3,"a":0,"stake":17},"Dan D":{"h":2,"a":0,"stake":17},"🤖":{"h":2,"a":1,"stake":6}},"kickoff":"2026-06-21T04:00:00Z"},{"home":"Belgium","away":"IR Iran","actual":null,"predictions":{"Fred + Teilo":{"h":2,"a":1,"stake":17},"Rhodri B":{"h":4,"a":0,"stake":23},"Rhodri W":{"h":2,"a":0,"stake":8},"Llion":{"h":2,"a":0,"stake":15},"Nick B":{"h":3,"a":0,"stake":14},"Ant":{"h":3,"a":1,"stake":14},"Lane":{"h":2,"a":0,"stake":14},"Gwil":{"h":3,"a":0,"stake":19},"Matt":{"h":2,"a":1,"stake":9},"Liam B":{"h":3,"a":0,"stake":16},"Gaz T":{"h":2,"a":1,"stake":13},"Guto":{"h":1,"a":0,"stake":7},"Gaz E":{"h":4,"a":0,"stake":18},"Trystan H":{"h":3,"a":1,"stake":18},"Nick S":{"h":2,"a":0,"stake":11},"Dan D":{"h":3,"a":1,"stake":18},"🤖":{"h":2,"a":1,"stake":7}},"kickoff":"2026-06-21T19:00:00Z"},{"home":"Egypt","away":"New Zealand","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":0,"stake":12},"Rhodri B":{"h":1,"a":1,"stake":3},"Rhodri W":{"h":1,"a":0,"stake":10},"Llion":{"h":1,"a":0,"stake":1},"Nick B":{"h":4,"a":0,"stake":21},"Ant":{"h":2,"a":0,"stake":11},"Lane":{"h":3,"a":0,"stake":22},"Gwil":{"h":2,"a":0,"stake":20},"Matt":{"h":2,"a":1,"stake":6},"Liam B":{"h":3,"a":1,"stake":15},"Gaz T":{"h":1,"a":0,"stake":17},"Guto":{"h":3,"a":1,"stake":12},"Gaz E":{"h":1,"a":0,"stake":7},"Trystan H":{"h":2,"a":0,"stake":10},"Nick S":{"h":2,"a":0,"stake":12},"Dan D":{"h":2,"a":0,"stake":3},"🤖":{"h":2,"a":0,"stake":23}},"kickoff":"2026-06-22T01:00:00Z"},{"home":"Spain","away":"Saudi Arabia","actual":null,"predictions":{"Fred + Teilo":{"h":3,"a":0,"stake":22},"Rhodri B":{"h":2,"a":0,"stake":15},"Rhodri W":{"h":3,"a":0,"stake":24},"Llion":{"h":2,"a":0,"stake":18},"Nick B":{"h":3,"a":0,"stake":22},"Ant":{"h":2,"a":0,"stake":22},"Lane":{"h":4,"a":0,"stake":23},"Gwil":{"h":4,"a":0,"stake":21},"Matt":{"h":3,"a":0,"stake":17},"Liam B":{"h":3,"a":0,"stake":17},"Gaz T":{"h":3,"a":0,"stake":22},"Guto":{"h":4,"a":1,"stake":22},"Gaz E":{"h":3,"a":0,"stake":23},"Trystan H":{"h":4,"a":1,"stake":23},"Nick S":{"h":2,"a":0,"stake":20},"Dan D":{"h":4,"a":0,"stake":22},"🤖":{"h":2,"a":0,"stake":21}},"kickoff":"2026-06-21T16:00:00Z"},{"home":"Cabo Verde","away":"Uruguay","actual":null,"predictions":{"Fred + Teilo":{"h":0,"a":1,"stake":13},"Rhodri B":{"h":0,"a":2,"stake":7},"Rhodri W":{"h":0,"a":2,"stake":19},"Llion":{"h":1,"a":2,"stake":6},"Nick B":{"h":0,"a":4,"stake":20},"Ant":{"h":0,"a":1,"stake":9},"Lane":{"h":0,"a":3,"stake":20},"Gwil":{"h":0,"a":3,"stake":14},"Matt":{"h":0,"a":2,"stake":10},"Liam B":{"h":0,"a":3,"stake":19},"Gaz T":{"h":0,"a":2,"stake":9},"Guto":{"h":0,"a":2,"stake":16},"Gaz E":{"h":0,"a":3,"stake":15},"Trystan H":{"h":0,"a":3,"stake":14},"Nick S":{"h":0,"a":2,"stake":19},"Dan D":{"h":0,"a":2,"stake":14},"🤖":{"h":0,"a":2,"stake":19}},"kickoff":"2026-06-21T22:00:00Z"},{"home":"France","away":"Iraq","actual":null,"predictions":{"Fred + Teilo":{"h":3,"a":0,"stake":23},"Rhodri B":{"h":3,"a":0,"stake":16},"Rhodri W":{"h":3,"a":0,"stake":23},"Llion":{"h":4,"a":0,"stake":24},"Nick B":{"h":5,"a":0,"stake":23},"Ant":{"h":4,"a":1,"stake":21},"Lane":{"h":4,"a":0,"stake":24},"Gwil":{"h":4,"a":0,"stake":22},"Matt":{"h":4,"a":0,"stake":24},"Liam B":{"h":4,"a":0,"stake":22},"Gaz T":{"h":3,"a":0,"stake":23},"Guto":{"h":5,"a":0,"stake":24},"Gaz E":{"h":4,"a":0,"stake":22},"Trystan H":{"h":3,"a":0,"stake":17},"Nick S":{"h":4,"a":1,"stake":24},"Dan D":{"h":5,"a":1,"stake":24},"🤖":{"h":3,"a":0,"stake":22}},"kickoff":"2026-06-22T21:00:00Z"},{"home":"Senegal","away":"Norway","actual":null,"predictions":{"Fred + Teilo":{"h":2,"a":2,"stake":1},"Rhodri B":{"h":1,"a":1,"stake":6},"Rhodri W":{"h":1,"a":2,"stake":6},"Llion":{"h":1,"a":1,"stake":2},"Nick B":{"h":2,"a":2,"stake":4},"Ant":{"h":2,"a":2,"stake":4},"Lane":{"h":1,"a":2,"stake":4},"Gwil":{"h":2,"a":1,"stake":2},"Matt":{"h":1,"a":2,"stake":7},"Liam B":{"h":2,"a":2,"stake":1},"Gaz T":{"h":1,"a":1,"stake":1},"Guto":{"h":1,"a":1,"stake":1},"Gaz E":{"h":1,"a":1,"stake":16},"Trystan H":{"h":2,"a":2,"stake":1},"Nick S":{"h":1,"a":2,"stake":1},"Dan D":{"h":1,"a":2,"stake":13},"🤖":{"h":1,"a":1,"stake":1}},"kickoff":"2026-06-23T00:00:00Z"},{"home":"Argentina","away":"Austria","actual":null,"predictions":{"Fred + Teilo":{"h":2,"a":0,"stake":19},"Rhodri B":{"h":2,"a":0,"stake":5},"Rhodri W":{"h":2,"a":0,"stake":13},"Llion":{"h":2,"a":0,"stake":21},"Nick B":{"h":3,"a":0,"stake":18},"Ant":{"h":2,"a":0,"stake":18},"Lane":{"h":2,"a":0,"stake":15},"Gwil":{"h":1,"a":1,"stake":5},"Matt":{"h":3,"a":1,"stake":18},"Liam B":{"h":2,"a":0,"stake":12},"Gaz T":{"h":2,"a":0,"stake":20},"Guto":{"h":3,"a":1,"stake":21},"Gaz E":{"h":2,"a":0,"stake":20},"Trystan H":{"h":3,"a":0,"stake":21},"Nick S":{"h":3,"a":0,"stake":23},"Dan D":{"h":3,"a":1,"stake":21},"🤖":{"h":2,"a":0,"stake":17}},"kickoff":"2026-06-22T17:00:00Z"},{"home":"Algeria","away":"Jordan","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":1,"stake":4},"Rhodri B":{"h":0,"a":0,"stake":4},"Rhodri W":{"h":2,"a":1,"stake":9},"Llion":{"h":2,"a":1,"stake":3},"Nick B":{"h":3,"a":0,"stake":10},"Ant":{"h":2,"a":0,"stake":10},"Lane":{"h":2,"a":0,"stake":18},"Gwil":{"h":2,"a":0,"stake":10},"Matt":{"h":1,"a":0,"stake":3},"Liam B":{"h":3,"a":1,"stake":14},"Gaz T":{"h":2,"a":1,"stake":7},"Guto":{"h":2,"a":0,"stake":15},"Gaz E":{"h":2,"a":1,"stake":2},"Trystan H":{"h":1,"a":0,"stake":2},"Nick S":{"h":2,"a":2,"stake":2},"Dan D":{"h":2,"a":2,"stake":1},"🤖":{"h":2,"a":1,"stake":11}},"kickoff":"2026-06-23T03:00:00Z"},{"home":"Portugal","away":"Uzbekistan","actual":null,"predictions":{"Fred + Teilo":{"h":2,"a":0,"stake":20},"Rhodri B":{"h":3,"a":0,"stake":19},"Rhodri W":{"h":3,"a":1,"stake":21},"Llion":{"h":4,"a":0,"stake":22},"Nick B":{"h":5,"a":0,"stake":19},"Ant":{"h":2,"a":0,"stake":19},"Lane":{"h":3,"a":0,"stake":19},"Gwil":{"h":3,"a":0,"stake":12},"Matt":{"h":3,"a":0,"stake":20},"Liam B":{"h":3,"a":1,"stake":21},"Gaz T":{"h":4,"a":0,"stake":21},"Guto":{"h":3,"a":1,"stake":17},"Gaz E":{"h":4,"a":0,"stake":17},"Trystan H":{"h":3,"a":0,"stake":20},"Nick S":{"h":2,"a":0,"stake":15},"Dan D":{"h":3,"a":0,"stake":16},"🤖":{"h":2,"a":0,"stake":20}},"kickoff":"2026-06-23T17:00:00Z"},{"home":"Colombia","away":"Congo DR","actual":null,"predictions":{"Fred + Teilo":{"h":0,"a":0,"stake":5},"Rhodri B":{"h":1,"a":0,"stake":14},"Rhodri W":{"h":2,"a":0,"stake":12},"Llion":{"h":2,"a":1,"stake":4},"Nick B":{"h":3,"a":1,"stake":16},"Ant":{"h":1,"a":1,"stake":3},"Lane":{"h":2,"a":1,"stake":6},"Gwil":{"h":3,"a":0,"stake":16},"Matt":{"h":2,"a":0,"stake":15},"Liam B":{"h":2,"a":1,"stake":13},"Gaz T":{"h":2,"a":0,"stake":19},"Guto":{"h":2,"a":1,"stake":13},"Gaz E":{"h":2,"a":1,"stake":5},"Trystan H":{"h":2,"a":1,"stake":6},"Nick S":{"h":3,"a":1,"stake":18},"Dan D":{"h":2,"a":0,"stake":15},"🤖":{"h":2,"a":1,"stake":9}},"kickoff":"2026-06-24T02:00:00Z"},{"home":"England","away":"Ghana","actual":null,"predictions":{"Fred + Teilo":{"h":2,"a":0,"stake":21},"Rhodri B":{"h":3,"a":0,"stake":11},"Rhodri W":{"h":3,"a":0,"stake":20},"Llion":{"h":2,"a":0,"stake":8},"Nick B":{"h":3,"a":1,"stake":5},"Ant":{"h":2,"a":0,"stake":17},"Lane":{"h":3,"a":1,"stake":16},"Gwil":{"h":1,"a":0,"stake":13},"Matt":{"h":3,"a":1,"stake":16},"Liam B":{"h":4,"a":0,"stake":20},"Gaz T":{"h":2,"a":1,"stake":14},"Guto":{"h":3,"a":2,"stake":8},"Gaz E":{"h":2,"a":1,"stake":21},"Trystan H":{"h":2,"a":0,"stake":15},"Nick S":{"h":3,"a":0,"stake":22},"Dan D":{"h":3,"a":1,"stake":20},"🤖":{"h":2,"a":0,"stake":4}},"kickoff":"2026-06-23T20:00:00Z"},{"home":"Croatia","away":"Panama","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":0,"stake":14},"Rhodri B":{"h":4,"a":0,"stake":22},"Rhodri W":{"h":2,"a":0,"stake":11},"Llion":{"h":3,"a":1,"stake":7},"Nick B":{"h":3,"a":0,"stake":17},"Ant":{"h":4,"a":1,"stake":20},"Lane":{"h":2,"a":1,"stake":5},"Gwil":{"h":3,"a":0,"stake":17},"Matt":{"h":2,"a":0,"stake":14},"Liam B":{"h":3,"a":0,"stake":18},"Gaz T":{"h":2,"a":0,"stake":18},"Guto":{"h":2,"a":1,"stake":10},"Gaz E":{"h":3,"a":1,"stake":6},"Trystan H":{"h":3,"a":0,"stake":16},"Nick S":{"h":2,"a":0,"stake":10},"Dan D":{"h":2,"a":0,"stake":6},"🤖":{"h":2,"a":1,"stake":12}},"kickoff":"2026-06-23T23:00:00Z"}]},{"name":"Matchweek 3","fixtures":[{"home":"Czechia","away":"Mexico","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":2,"stake":10},"Rhodri B":{"h":1,"a":1,"stake":13},"Rhodri W":{"h":1,"a":1,"stake":1},"Llion":{"h":0,"a":2,"stake":10},"Nick B":{"h":0,"a":2,"stake":10},"Ant":{"h":1,"a":1,"stake":3},"Lane":{"h":1,"a":2,"stake":8},"Gwil":{"h":0,"a":1,"stake":9},"Matt":{"h":0,"a":2,"stake":20},"Liam B":{"h":1,"a":3,"stake":13},"Gaz T":{"h":0,"a":1,"stake":12},"Guto":{"h":2,"a":2,"stake":8},"Gaz E":{"h":0,"a":1,"stake":9},"Trystan H":{"h":0,"a":2,"stake":17},"Nick S":{"h":1,"a":1,"stake":1},"Dan D":{"h":1,"a":2,"stake":10},"🤖":{"h":0,"a":2,"stake":18}},"kickoff":"2026-06-25T01:00:00Z"},{"home":"South Africa","away":"Korea Republic","actual":null,"predictions":{"Fred + Teilo":{"h":0,"a":1,"stake":9},"Rhodri B":{"h":1,"a":0,"stake":4},"Rhodri W":{"h":0,"a":2,"stake":17},"Llion":{"h":1,"a":2,"stake":12},"Nick B":{"h":1,"a":2,"stake":6},"Ant":{"h":1,"a":2,"stake":7},"Lane":{"h":0,"a":2,"stake":13},"Gwil":{"h":1,"a":3,"stake":13},"Matt":{"h":0,"a":1,"stake":11},"Liam B":{"h":0,"a":3,"stake":11},"Gaz T":{"h":0,"a":2,"stake":15},"Guto":{"h":0,"a":3,"stake":11},"Gaz E":{"h":1,"a":3,"stake":13},"Trystan H":{"h":0,"a":3,"stake":22},"Nick S":{"h":1,"a":1,"stake":8},"Dan D":{"h":0,"a":2,"stake":9},"🤖":{"h":0,"a":2,"stake":16}},"kickoff":"2026-06-25T01:00:00Z"},{"home":"Bosnia and Herzegovina","away":"Qatar","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":0,"stake":6},"Rhodri B":{"h":2,"a":0,"stake":15},"Rhodri W":{"h":1,"a":0,"stake":5},"Llion":{"h":2,"a":2,"stake":2},"Nick B":{"h":2,"a":0,"stake":11},"Ant":{"h":2,"a":0,"stake":14},"Lane":{"h":2,"a":0,"stake":12},"Gwil":{"h":2,"a":1,"stake":11},"Matt":{"h":1,"a":1,"stake":2},"Liam B":{"h":2,"a":1,"stake":16},"Gaz T":{"h":2,"a":1,"stake":11},"Guto":{"h":0,"a":0,"stake":2},"Gaz E":{"h":2,"a":1,"stake":11},"Trystan H":{"h":1,"a":2,"stake":11},"Nick S":{"h":2,"a":0,"stake":17},"Dan D":{"h":2,"a":0,"stake":6},"🤖":{"h":2,"a":1,"stake":9}},"kickoff":"2026-06-24T19:00:00Z"},{"home":"Switzerland","away":"Canada","actual":null,"predictions":{"Fred + Teilo":{"h":2,"a":2,"stake":3},"Rhodri B":{"h":1,"a":2,"stake":10},"Rhodri W":{"h":2,"a":2,"stake":2},"Llion":{"h":1,"a":1,"stake":5},"Nick B":{"h":1,"a":2,"stake":5},"Ant":{"h":1,"a":3,"stake":10},"Lane":{"h":1,"a":1,"stake":4},"Gwil":{"h":1,"a":0,"stake":7},"Matt":{"h":2,"a":1,"stake":10},"Liam B":{"h":1,"a":2,"stake":2},"Gaz T":{"h":1,"a":1,"stake":1},"Guto":{"h":2,"a":3,"stake":7},"Gaz E":{"h":1,"a":0,"stake":7},"Trystan H":{"h":1,"a":2,"stake":12},"Nick S":{"h":2,"a":1,"stake":3},"Dan D":{"h":1,"a":1,"stake":4},"🤖":{"h":2,"a":2,"stake":6}},"kickoff":"2026-06-24T19:00:00Z"},{"home":"Scotland","away":"Brazil","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":3,"stake":16},"Rhodri B":{"h":0,"a":3,"stake":16},"Rhodri W":{"h":1,"a":3,"stake":18},"Llion":{"h":1,"a":3,"stake":20},"Nick B":{"h":0,"a":3,"stake":21},"Ant":{"h":0,"a":2,"stake":15},"Lane":{"h":0,"a":3,"stake":18},"Gwil":{"h":1,"a":3,"stake":15},"Matt":{"h":1,"a":2,"stake":13},"Liam B":{"h":1,"a":3,"stake":18},"Gaz T":{"h":1,"a":3,"stake":19},"Guto":{"h":2,"a":4,"stake":19},"Gaz E":{"h":1,"a":3,"stake":15},"Trystan H":{"h":0,"a":3,"stake":21},"Nick S":{"h":0,"a":2,"stake":23},"Dan D":{"h":1,"a":4,"stake":19},"🤖":{"h":0,"a":2,"stake":15}},"kickoff":"2026-06-24T22:00:00Z"},{"home":"Morocco","away":"Haiti","actual":null,"predictions":{"Fred + Teilo":{"h":4,"a":0,"stake":22},"Rhodri B":{"h":3,"a":0,"stake":17},"Rhodri W":{"h":3,"a":0,"stake":24},"Llion":{"h":2,"a":0,"stake":18},"Nick B":{"h":4,"a":0,"stake":24},"Ant":{"h":3,"a":0,"stake":23},"Lane":{"h":3,"a":0,"stake":21},"Gwil":{"h":4,"a":0,"stake":23},"Matt":{"h":3,"a":0,"stake":24},"Liam B":{"h":5,"a":0,"stake":19},"Gaz T":{"h":3,"a":0,"stake":23},"Guto":{"h":5,"a":1,"stake":22},"Gaz E":{"h":4,"a":0,"stake":23},"Trystan H":{"h":3,"a":0,"stake":24},"Nick S":{"h":2,"a":0,"stake":18},"Dan D":{"h":3,"a":0,"stake":18},"🤖":{"h":2,"a":0,"stake":24}},"kickoff":"2026-06-24T22:00:00Z"},{"home":"Türkiye","away":"United States","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":2,"stake":11},"Rhodri B":{"h":1,"a":2,"stake":19},"Rhodri W":{"h":1,"a":2,"stake":12},"Llion":{"h":1,"a":3,"stake":17},"Nick B":{"h":0,"a":2,"stake":9},"Ant":{"h":0,"a":3,"stake":22},"Lane":{"h":0,"a":3,"stake":22},"Gwil":{"h":0,"a":3,"stake":14},"Matt":{"h":0,"a":2,"stake":15},"Liam B":{"h":1,"a":2,"stake":6},"Gaz T":{"h":1,"a":2,"stake":10},"Guto":{"h":1,"a":2,"stake":6},"Gaz E":{"h":0,"a":3,"stake":14},"Trystan H":{"h":0,"a":3,"stake":19},"Nick S":{"h":1,"a":3,"stake":16},"Dan D":{"h":1,"a":3,"stake":17},"🤖":{"h":0,"a":2,"stake":13}},"kickoff":"2026-06-26T02:00:00Z"},{"home":"Paraguay","away":"Australia","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":1,"stake":1},"Rhodri B":{"h":1,"a":1,"stake":5},"Rhodri W":{"h":1,"a":2,"stake":7},"Llion":{"h":1,"a":1,"stake":3},"Nick B":{"h":2,"a":2,"stake":4},"Ant":{"h":1,"a":2,"stake":4},"Lane":{"h":1,"a":1,"stake":3},"Gwil":{"h":1,"a":1,"stake":6},"Matt":{"h":1,"a":1,"stake":9},"Liam B":{"h":2,"a":2,"stake":1},"Gaz T":{"h":0,"a":0,"stake":5},"Guto":{"h":1,"a":1,"stake":3},"Gaz E":{"h":1,"a":1,"stake":6},"Trystan H":{"h":1,"a":2,"stake":10},"Nick S":{"h":1,"a":1,"stake":9},"Dan D":{"h":1,"a":1,"stake":3},"🤖":{"h":1,"a":1,"stake":8}},"kickoff":"2026-06-26T02:00:00Z"},{"home":"Ecuador","away":"Germany","actual":null,"predictions":{"Fred + Teilo":{"h":0,"a":3,"stake":18},"Rhodri B":{"h":0,"a":3,"stake":18},"Rhodri W":{"h":1,"a":2,"stake":16},"Llion":{"h":0,"a":3,"stake":21},"Nick B":{"h":0,"a":3,"stake":15},"Ant":{"h":1,"a":2,"stake":19},"Lane":{"h":0,"a":2,"stake":16},"Gwil":{"h":0,"a":2,"stake":19},"Matt":{"h":0,"a":3,"stake":16},"Liam B":{"h":1,"a":2,"stake":9},"Gaz T":{"h":0,"a":3,"stake":20},"Guto":{"h":1,"a":3,"stake":20},"Gaz E":{"h":0,"a":2,"stake":19},"Trystan H":{"h":0,"a":3,"stake":20},"Nick S":{"h":0,"a":2,"stake":22},"Dan D":{"h":0,"a":3,"stake":20},"🤖":{"h":0,"a":2,"stake":14}},"kickoff":"2026-06-25T20:00:00Z"},{"home":"Curaçao","away":"Côte d'Ivoire","actual":null,"predictions":{"Fred + Teilo":{"h":0,"a":2,"stake":13},"Rhodri B":{"h":0,"a":1,"stake":6},"Rhodri W":{"h":0,"a":3,"stake":21},"Llion":{"h":0,"a":2,"stake":9},"Nick B":{"h":0,"a":3,"stake":16},"Ant":{"h":0,"a":3,"stake":20},"Lane":{"h":0,"a":3,"stake":20},"Gwil":{"h":1,"a":3,"stake":20},"Matt":{"h":0,"a":3,"stake":23},"Liam B":{"h":0,"a":5,"stake":24},"Gaz T":{"h":0,"a":3,"stake":17},"Guto":{"h":1,"a":3,"stake":12},"Gaz E":{"h":1,"a":3,"stake":20},"Trystan H":{"h":0,"a":3,"stake":18},"Nick S":{"h":0,"a":2,"stake":4},"Dan D":{"h":1,"a":3,"stake":14},"🤖":{"h":0,"a":2,"stake":12}},"kickoff":"2026-06-25T20:00:00Z"},{"home":"Tunisia","away":"Netherlands","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":4,"stake":20},"Rhodri B":{"h":0,"a":2,"stake":9},"Rhodri W":{"h":0,"a":2,"stake":20},"Llion":{"h":0,"a":3,"stake":22},"Nick B":{"h":0,"a":3,"stake":18},"Ant":{"h":0,"a":3,"stake":21},"Lane":{"h":0,"a":4,"stake":24},"Gwil":{"h":0,"a":4,"stake":21},"Matt":{"h":0,"a":3,"stake":21},"Liam B":{"h":1,"a":5,"stake":22},"Gaz T":{"h":1,"a":4,"stake":22},"Guto":{"h":0,"a":4,"stake":23},"Gaz E":{"h":0,"a":4,"stake":21},"Trystan H":{"h":0,"a":3,"stake":14},"Nick S":{"h":0,"a":3,"stake":20},"Dan D":{"h":0,"a":4,"stake":22},"🤖":{"h":0,"a":3,"stake":20}},"kickoff":"2026-06-25T23:00:00Z"},{"home":"Japan","away":"Sweden","actual":null,"predictions":{"Fred + Teilo":{"h":2,"a":2,"stake":2},"Rhodri B":{"h":2,"a":1,"stake":8},"Rhodri W":{"h":2,"a":1,"stake":9},"Llion":{"h":3,"a":2,"stake":6},"Nick B":{"h":2,"a":1,"stake":3},"Ant":{"h":2,"a":1,"stake":16},"Lane":{"h":2,"a":1,"stake":6},"Gwil":{"h":3,"a":1,"stake":17},"Matt":{"h":2,"a":1,"stake":6},"Liam B":{"h":2,"a":0,"stake":7},"Gaz T":{"h":2,"a":1,"stake":9},"Guto":{"h":1,"a":0,"stake":9},"Gaz E":{"h":3,"a":1,"stake":17},"Trystan H":{"h":2,"a":1,"stake":9},"Nick S":{"h":2,"a":1,"stake":12},"Dan D":{"h":1,"a":0,"stake":7},"🤖":{"h":2,"a":1,"stake":11}},"kickoff":"2026-06-25T23:00:00Z"},{"home":"New Zealand","away":"Belgium","actual":null,"predictions":{"Fred + Teilo":{"h":0,"a":3,"stake":17},"Rhodri B":{"h":0,"a":1,"stake":11},"Rhodri W":{"h":0,"a":2,"stake":19},"Llion":{"h":0,"a":2,"stake":16},"Nick B":{"h":0,"a":3,"stake":20},"Ant":{"h":1,"a":3,"stake":13},"Lane":{"h":0,"a":3,"stake":19},"Gwil":{"h":1,"a":2,"stake":16},"Matt":{"h":0,"a":3,"stake":19},"Liam B":{"h":1,"a":3,"stake":20},"Gaz T":{"h":0,"a":2,"stake":18},"Guto":{"h":2,"a":3,"stake":15},"Gaz E":{"h":1,"a":2,"stake":16},"Trystan H":{"h":1,"a":2,"stake":8},"Nick S":{"h":1,"a":2,"stake":14},"Dan D":{"h":0,"a":1,"stake":13},"🤖":{"h":0,"a":2,"stake":23}},"kickoff":"2026-06-27T03:00:00Z"},{"home":"Egypt","away":"IR Iran","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":1,"stake":5},"Rhodri B":{"h":1,"a":0,"stake":2},"Rhodri W":{"h":2,"a":1,"stake":8},"Llion":{"h":2,"a":1,"stake":11},"Nick B":{"h":2,"a":1,"stake":13},"Ant":{"h":1,"a":1,"stake":1},"Lane":{"h":2,"a":1,"stake":9},"Gwil":{"h":1,"a":1,"stake":2},"Matt":{"h":2,"a":1,"stake":14},"Liam B":{"h":2,"a":1,"stake":8},"Gaz T":{"h":1,"a":1,"stake":2},"Guto":{"h":2,"a":1,"stake":13},"Gaz E":{"h":1,"a":1,"stake":2},"Trystan H":{"h":2,"a":0,"stake":4},"Nick S":{"h":1,"a":1,"stake":11},"Dan D":{"h":2,"a":0,"stake":12},"🤖":{"h":1,"a":1,"stake":5}},"kickoff":"2026-06-27T03:00:00Z"},{"home":"Uruguay","away":"Spain","actual":null,"predictions":{"Fred + Teilo":{"h":0,"a":3,"stake":15},"Rhodri B":{"h":0,"a":2,"stake":20},"Rhodri W":{"h":1,"a":2,"stake":14},"Llion":{"h":1,"a":3,"stake":19},"Nick B":{"h":1,"a":3,"stake":14},"Ant":{"h":0,"a":2,"stake":17},"Lane":{"h":0,"a":2,"stake":14},"Gwil":{"h":0,"a":3,"stake":18},"Matt":{"h":1,"a":3,"stake":17},"Liam B":{"h":1,"a":4,"stake":15},"Gaz T":{"h":1,"a":3,"stake":14},"Guto":{"h":1,"a":3,"stake":17},"Gaz E":{"h":0,"a":3,"stake":18},"Trystan H":{"h":1,"a":2,"stake":13},"Nick S":{"h":1,"a":1,"stake":13},"Dan D":{"h":1,"a":3,"stake":21},"🤖":{"h":1,"a":2,"stake":10}},"kickoff":"2026-06-27T00:00:00Z"},{"home":"Cabo Verde","away":"Saudi Arabia","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":0,"stake":4},"Rhodri B":{"h":2,"a":2,"stake":1},"Rhodri W":{"h":1,"a":1,"stake":3},"Llion":{"h":1,"a":1,"stake":1},"Nick B":{"h":2,"a":0,"stake":8},"Ant":{"h":2,"a":1,"stake":8},"Lane":{"h":1,"a":0,"stake":5},"Gwil":{"h":1,"a":1,"stake":8},"Matt":{"h":1,"a":1,"stake":3},"Liam B":{"h":2,"a":2,"stake":3},"Gaz T":{"h":1,"a":2,"stake":7},"Guto":{"h":2,"a":2,"stake":4},"Gaz E":{"h":1,"a":1,"stake":8},"Trystan H":{"h":2,"a":0,"stake":5},"Nick S":{"h":1,"a":1,"stake":2},"Dan D":{"h":1,"a":0,"stake":2},"🤖":{"h":1,"a":0,"stake":7}},"kickoff":"2026-06-27T00:00:00Z"},{"home":"Norway","away":"France","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":3,"stake":21},"Rhodri B":{"h":1,"a":3,"stake":22},"Rhodri W":{"h":1,"a":2,"stake":13},"Llion":{"h":2,"a":3,"stake":15},"Nick B":{"h":1,"a":3,"stake":17},"Ant":{"h":3,"a":3,"stake":2},"Lane":{"h":1,"a":2,"stake":10},"Gwil":{"h":1,"a":2,"stake":10},"Matt":{"h":1,"a":2,"stake":8},"Liam B":{"h":1,"a":3,"stake":12},"Gaz T":{"h":2,"a":3,"stake":13},"Guto":{"h":1,"a":3,"stake":18},"Gaz E":{"h":1,"a":2,"stake":10},"Trystan H":{"h":1,"a":3,"stake":15},"Nick S":{"h":0,"a":2,"stake":10},"Dan D":{"h":2,"a":3,"stake":11},"🤖":{"h":2,"a":2,"stake":4}},"kickoff":"2026-06-26T19:00:00Z"},{"home":"Senegal","away":"Iraq","actual":null,"predictions":{"Fred + Teilo":{"h":2,"a":0,"stake":14},"Rhodri B":{"h":3,"a":0,"stake":14},"Rhodri W":{"h":2,"a":0,"stake":10},"Llion":{"h":3,"a":0,"stake":14},"Nick B":{"h":3,"a":0,"stake":19},"Ant":{"h":2,"a":0,"stake":9},"Lane":{"h":2,"a":0,"stake":15},"Gwil":{"h":3,"a":0,"stake":22},"Matt":{"h":2,"a":1,"stake":4},"Liam B":{"h":4,"a":1,"stake":17},"Gaz T":{"h":2,"a":0,"stake":16},"Guto":{"h":4,"a":1,"stake":21},"Gaz E":{"h":3,"a":0,"stake":22},"Trystan H":{"h":1,"a":1,"stake":1},"Nick S":{"h":2,"a":0,"stake":7},"Dan D":{"h":3,"a":0,"stake":16},"🤖":{"h":2,"a":1,"stake":19}},"kickoff":"2026-06-26T19:00:00Z"},{"home":"Jordan","away":"Argentina","actual":null,"predictions":{"Fred + Teilo":{"h":0,"a":3,"stake":24},"Rhodri B":{"h":0,"a":5,"stake":21},"Rhodri W":{"h":0,"a":3,"stake":23},"Llion":{"h":0,"a":4,"stake":24},"Nick B":{"h":0,"a":4,"stake":23},"Ant":{"h":0,"a":4,"stake":24},"Lane":{"h":0,"a":3,"stake":23},"Gwil":{"h":0,"a":4,"stake":24},"Matt":{"h":0,"a":3,"stake":22},"Liam B":{"h":1,"a":4,"stake":23},"Gaz T":{"h":0,"a":5,"stake":24},"Guto":{"h":1,"a":5,"stake":24},"Gaz E":{"h":0,"a":4,"stake":24},"Trystan H":{"h":0,"a":4,"stake":23},"Nick S":{"h":0,"a":3,"stake":24},"Dan D":{"h":0,"a":6,"stake":24},"🤖":{"h":0,"a":2,"stake":22}},"kickoff":"2026-06-28T02:00:00Z"},{"home":"Algeria","away":"Austria","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":2,"stake":8},"Rhodri B":{"h":1,"a":1,"stake":7},"Rhodri W":{"h":0,"a":2,"stake":11},"Llion":{"h":1,"a":2,"stake":8},"Nick B":{"h":2,"a":2,"stake":2},"Ant":{"h":0,"a":1,"stake":5},"Lane":{"h":1,"a":1,"stake":2},"Gwil":{"h":2,"a":3,"stake":4},"Matt":{"h":1,"a":2,"stake":5},"Liam B":{"h":3,"a":2,"stake":4},"Gaz T":{"h":1,"a":1,"stake":4},"Guto":{"h":1,"a":2,"stake":5},"Gaz E":{"h":2,"a":3,"stake":4},"Trystan H":{"h":1,"a":2,"stake":3},"Nick S":{"h":1,"a":1,"stake":6},"Dan D":{"h":1,"a":2,"stake":8},"🤖":{"h":1,"a":1,"stake":2}},"kickoff":"2026-06-28T02:00:00Z"},{"home":"Congo DR","away":"Uzbekistan","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":0,"stake":12},"Rhodri B":{"h":1,"a":2,"stake":3},"Rhodri W":{"h":0,"a":1,"stake":4},"Llion":{"h":2,"a":1,"stake":4},"Nick B":{"h":2,"a":0,"stake":12},"Ant":{"h":2,"a":0,"stake":12},"Lane":{"h":2,"a":0,"stake":11},"Gwil":{"h":2,"a":1,"stake":1},"Matt":{"h":1,"a":1,"stake":1},"Liam B":{"h":3,"a":1,"stake":14},"Gaz T":{"h":3,"a":2,"stake":3},"Guto":{"h":2,"a":0,"stake":10},"Gaz E":{"h":2,"a":1,"stake":1},"Trystan H":{"h":2,"a":0,"stake":7},"Nick S":{"h":2,"a":2,"stake":5},"Dan D":{"h":1,"a":1,"stake":1},"🤖":{"h":1,"a":1,"stake":1}},"kickoff":"2026-06-27T23:30:00Z"},{"home":"Colombia","away":"Portugal","actual":null,"predictions":{"Fred + Teilo":{"h":2,"a":3,"stake":19},"Rhodri B":{"h":0,"a":3,"stake":23},"Rhodri W":{"h":1,"a":3,"stake":15},"Llion":{"h":0,"a":2,"stake":13},"Nick B":{"h":2,"a":2,"stake":1},"Ant":{"h":1,"a":2,"stake":11},"Lane":{"h":1,"a":1,"stake":1},"Gwil":{"h":2,"a":1,"stake":3},"Matt":{"h":1,"a":2,"stake":7},"Liam B":{"h":1,"a":2,"stake":5},"Gaz T":{"h":1,"a":2,"stake":8},"Guto":{"h":2,"a":3,"stake":14},"Gaz E":{"h":2,"a":1,"stake":3},"Trystan H":{"h":0,"a":2,"stake":6},"Nick S":{"h":1,"a":2,"stake":15},"Dan D":{"h":1,"a":2,"stake":15},"🤖":{"h":1,"a":1,"stake":3}},"kickoff":"2026-06-27T23:30:00Z"},{"home":"Panama","away":"England","actual":null,"predictions":{"Fred + Teilo":{"h":0,"a":4,"stake":23},"Rhodri B":{"h":0,"a":4,"stake":24},"Rhodri W":{"h":0,"a":3,"stake":22},"Llion":{"h":0,"a":3,"stake":23},"Nick B":{"h":0,"a":3,"stake":22},"Ant":{"h":0,"a":3,"stake":18},"Lane":{"h":0,"a":3,"stake":17},"Gwil":{"h":0,"a":2,"stake":12},"Matt":{"h":0,"a":3,"stake":18},"Liam B":{"h":0,"a":5,"stake":21},"Gaz T":{"h":0,"a":3,"stake":21},"Guto":{"h":1,"a":2,"stake":16},"Gaz E":{"h":0,"a":2,"stake":12},"Trystan H":{"h":0,"a":3,"stake":16},"Nick S":{"h":0,"a":2,"stake":21},"Dan D":{"h":0,"a":4,"stake":23},"🤖":{"h":0,"a":2,"stake":17}},"kickoff":"2026-06-27T21:00:00Z"},{"home":"Croatia","away":"Ghana","actual":null,"predictions":{"Fred + Teilo":{"h":1,"a":2,"stake":7},"Rhodri B":{"h":2,"a":1,"stake":12},"Rhodri W":{"h":2,"a":1,"stake":6},"Llion":{"h":2,"a":2,"stake":7},"Nick B":{"h":2,"a":2,"stake":7},"Ant":{"h":0,"a":1,"stake":6},"Lane":{"h":1,"a":0,"stake":7},"Gwil":{"h":1,"a":1,"stake":5},"Matt":{"h":1,"a":1,"stake":12},"Liam B":{"h":3,"a":1,"stake":10},"Gaz T":{"h":2,"a":1,"stake":6},"Guto":{"h":2,"a":2,"stake":1},"Gaz E":{"h":0,"a":0,"stake":5},"Trystan H":{"h":2,"a":2,"stake":2},"Nick S":{"h":2,"a":1,"stake":19},"Dan D":{"h":2,"a":2,"stake":5},"🤖":{"h":2,"a":0,"stake":21}},"kickoff":"2026-06-27T21:00:00Z"}]}],"bracketPicks":{"categories":["Champions","Runner Up","3rd Place","Worst Team","Golden Boot","Golden Ball","Golden Glove","Best Young Player","Dark Horse","Most Goals (Group Stage)","Fewest Goals (Group Stage)","Total Tournament Goals","Total Tournament Cards"],"picks":{"Champions":{"Liam B":"France","Nick B":"France","Lane":"France","Rhodri W":"Spain","Rhodri B":"Argentina","Llion":"France","Matt":"Spain","Gwil":"England","Gaz E":"France","Guto":"France","Gaz T":"Spain","Ant":"France","Fred + Teilo":"France","Dan D":"France","Trystan H":"Spain","Nick S":"France","🤖":"Spain"},"Runner Up":{"Liam B":"Portugal","Nick B":"Spain","Lane":"Spain","Rhodri W":"France","Rhodri B":"England","Llion":"Portugal","Matt":"France","Gwil":"France","Gaz E":"Spain","Guto":"Spain","Gaz T":"France","Ant":"Brazil","Fred + Teilo":"England","Dan D":"Brazil","Trystan H":"France","Nick S":"Portgual","🤖":"France"},"3rd Place":{"Liam B":"England","Nick B":"Netherlands","Lane":"Netherlands","Rhodri W":"Argentina","Rhodri B":"France","Llion":"Spain","Matt":"Brazil","Gwil":"Portugal","Gaz E":"Argentina","Guto":"Brazil","Gaz T":"Brazil","Ant":"Spain","Fred + Teilo":"Spain","Dan D":"Spain","Trystan H":"England","Nick S":"Spain","🤖":"Portugal"},"Worst Team":{"Liam B":"Haiti","Nick B":"Haiti","Lane":"Curaçao","Rhodri W":"Curaçao","Rhodri B":"Panama","Llion":"New Zealand","Matt":"Haiti","Gwil":"Curacao","Gaz E":"Curacao","Guto":"Curaçao","Gaz T":"Curacao","Ant":"Qatar","Fred + Teilo":"Haiti","Dan D":"Iraq","Trystan H":"Haiti","Nick S":"Cape Verde","🤖":"New Zeland"},"Golden Boot":{"Liam B":"Kylian Mbappé","Nick B":"Kylian Mbappé","Lane":"Mikel Oyarzabal","Rhodri W":"Kylian Mbappé","Rhodri B":"Harry Kane","Llion":"Harry Kane","Matt":"Kylian Mbappé","Gwil":"Harry Kane","Gaz E":"Harry Kane","Guto":"Kylian Mbappé","Gaz T":"Harry Kane","Ant":"Kylian Mbappé","Fred + Teilo":"Kylian Mbappé","Dan D":"Kylian Mbappé","Trystan H":"Kylian Mbappé","Nick S":"Kylian Mbappé","🤖":"Kylian Mbappé"},"Golden Ball":{"Liam B":"Michael Olise","Nick B":"Lamine Yamal","Lane":"Lamine Yamal","Rhodri W":"Kylian Mbappé","Rhodri B":"Neymar","Llion":"Lamine Yamal","Matt":"Lamine Yamal","Gwil":"Declan Rice","Gaz E":"Kylian Mbappé","Guto":"Désiré Doué","Gaz T":"Kylian Mbappé","Ant":"Lamine Yamal","Fred + Teilo":"Kylian Mbappé","Dan D":"Kylian Mbappé","Trystan H":"Lamine Yamal","Nick S":"Kylian Mbappé","🤖":"Rodri"},"Golden Glove":{"Liam B":"Diogo Costa","Nick B":"Mike Maignan","Lane":"Mike Maignan","Rhodri W":"Unai Simón","Rhodri B":"Emiliano Martínez","Llion":"Mike Maignan","Matt":"Unai Simón","Gwil":"Diogo Costa","Gaz E":"David Raya","Guto":"Unai Simón","Gaz T":"Unai Simón","Ant":"Emiliano Martínez","Fred + Teilo":"Mike Maignan","Dan D":"Mike Maignan","Trystan H":"Unai Simón","Nick S":"Unai Simón","🤖":"Unai Simón"},"Best Young Player":{"Liam B":"Désiré Doué","Nick B":"Lamine Yamal","Lane":"Lamine Yamal","Rhodri W":"Lamine Yamal","Rhodri B":"Hugo Sochurek","Llion":"Lamine Yamal","Matt":"Lamine Yamal","Gwil":"Arda Güler","Gaz E":"Lamine Yamal","Guto":"Lamine Yamal","Gaz T":"Lamine Yamal","Ant":"Lamine Yamal","Fred + Teilo":"Lamine Yamal","Dan D":"Lamine Yamal","Trystan H":"Lamine Yamal","Nick S":"Lamine Yamal","🤖":"Lamine Yamal"},"Dark Horse":{"Liam B":"Mexico","Nick B":"Turkey","Lane":"Japan","Rhodri W":"Morocco","Rhodri B":"Ghana","Llion":"Norway","Matt":"Morocco","Gwil":"Switzerland","Gaz E":"Morocco","Guto":"Türkiye","Gaz T":"Morocco","Ant":"Japan","Fred + Teilo":"Morocco","Dan D":"Norway","Trystan H":"Uruguay","Nick S":"Ecuador","🤖":"Colombia"},"Most Goals (Group Stage)":{"Liam B":"Germany","Nick B":"Spain","Lane":"Spain","Rhodri W":"Spain","Rhodri B":"Argentina","Llion":"Portugal","Matt":"Spain","Gwil":"Belgium","Gaz E":"France","Guto":"France","Gaz T":"Portugal","Ant":"Spain","Fred + Teilo":"Spain","Dan D":"Portugal","Trystan H":"Spain","Nick S":"Argentina","🤖":"Spain"},"Fewest Goals (Group Stage)":{"Liam B":"Curacao","Nick B":"Haiti","Lane":"Curaçao","Rhodri W":"Curaçao","Rhodri B":"Panama","Llion":"New Zealand","Matt":"Haiti","Gwil":"Curacao","Gaz E":"Curacao","Guto":"Curaçao","Gaz T":"Curacao","Ant":"Iraq","Fred + Teilo":"Haiti","Dan D":"Haiti","Trystan H":"Curacao","Nick S":"Cape Verde","🤖":"New Zealand"},"Total Tournament Goals":{"Liam B":"288","Nick B":"350","Lane":"280","Rhodri W":"295","Rhodri B":"240","Llion":"264","Matt":"286","Gwil":"250","Gaz E":"208","Guto":"296","Gaz T":"290","Ant":"250","Fred + Teilo":"283","Dan D":"312","Trystan H":"288","Nick S":"260","🤖":"312"},"Total Tournament Cards":{"Liam B":"428","Nick B":"390","Lane":"416","Rhodri W":"383","Rhodri B":"221","Llion":"377","Matt":"392","Gwil":"350","Gaz E":"200","Guto":"362","Gaz T":"380","Ant":"300","Fred + Teilo":"298","Dan D":"399","Trystan H":"465","Nick S":"416","🤖":"360"}}}};
+// ── Results-only knockout fixtures: Semi-finals, 3rd-place play-off, Final ───────────────────
+// Pre-built and ready to fill in. These carry NO predictions -- they exist only so their goals
+// and cards count toward the Total Tournament Goals/Cards bonuses (which resolve once the Final is
+// played). They're invisible in the leaderboard columns and the matchweek tabs; their live scores
+// still auto-fill from the API once real team names are set, and they surface in the Next Fixture
+// card when their time comes. The whole matchweek is flagged `resultsOnly: true`.
+//
+// TO ACTIVATE: replace each "TBD" with the real team name as the bracket fills in (and adjust the
+// kickoff times if needed). The bonuses only resolve once EVERY fixture in the game is present and
+// resolved -- so the rest of the knockouts (R32/R16/QF) still need uploading too, and
+// TOTAL_TOURNAMENT_GAMES must equal the final total fixture count (104 with these four included).
+//
+// TO RUN PREDICTIONS on any of these instead of results-only: remove `resultsOnly: true` from that
+// fixture and give it a normal `predictions` block.
+DATA.matchweeks.push({
+  name: "Semi-finals & Final",
+  resultsOnly: true,
+  fixtures: [
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-14T23:00:00Z" }, // Semi-final 1
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-15T23:00:00Z" }, // Semi-final 2
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-18T19:00:00Z" }, // 3rd-place play-off
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-19T19:00:00Z" }, // Final
+  ],
+});
+
 const STORAGE_KEY = "wc2026_live_scores_v1";
 
 function loadOverrides() {
@@ -829,6 +909,10 @@ function computeTotals(excludeKey, onlyKeys, excludeKeys) {
     });
     let anyResolved = false, allResolved = true;
     mw.fixtures.forEach((fixture, fixIndex) => {
+      // Results-only fixtures (semis/3rd/final) carry no predictions -- they exist purely to feed
+      // the Total Goals/Cards totals. Skip them entirely here: no grading, and they don't gate the
+      // matchweek-winner bonus (anyResolved/allResolved track scored fixtures only).
+      if (fixture.resultsOnly) return;
       const k = fixtureKey(mwIndex, fixIndex);
       const allowed = !onlyKeys || onlyKeys.has(k);
       const excluded = k === excludeKey || !!(excludeKeys && excludeKeys.has(k));
@@ -954,12 +1038,33 @@ function totalTournamentGoalsFact() {
   let sum = 0, totalFixtures = 0, resolvedFixtures = 0;
   DATA.matchweeks.forEach((mw, mwIndex) => {
     mw.fixtures.forEach((fixture, fixIndex) => {
-      totalFixtures++;
+      totalFixtures++; // includes results-only fixtures -- their goals count toward the total
       const actual = getActual(mwIndex, fixIndex, fixture);
       if (actual) { sum += actual.h + actual.a; resolvedFixtures++; }
     });
   });
-  return resolvedFixtures === totalFixtures ? sum : null;
+  // Gated on the full scope (see TOTAL_TOURNAMENT_GAMES): only final once every fixture in the
+  // game is present AND resolved -- so it can't resolve early at group-stage end before the
+  // knockout/results-only fixtures are uploaded.
+  const complete = resolvedFixtures === totalFixtures && totalFixtures === TOTAL_TOURNAMENT_GAMES;
+  return complete ? sum : null;
+}
+
+// Total Tournament Cards -- the grand card total from the ESPN-backed Worker
+// (tournamentFacts.cardsTotal, full-tournament, fixture-independent). Resolved on the SAME gate as
+// goals: only final once every fixture is present and resolved (i.e. the tournament's done). Auto-
+// confirmed from ESPN; the number can still be sanity-checked/queried after the fact if needed.
+function totalTournamentCardsFact() {
+  let totalFixtures = 0, resolvedFixtures = 0;
+  DATA.matchweeks.forEach((mw, mwIndex) => {
+    mw.fixtures.forEach((fixture, fixIndex) => {
+      totalFixtures++;
+      if (getActual(mwIndex, fixIndex, fixture)) resolvedFixtures++;
+    });
+  });
+  const complete = resolvedFixtures === totalFixtures && totalFixtures === TOTAL_TOURNAMENT_GAMES;
+  const ct = tournamentFacts.cardsTotal;
+  return (complete && ct && typeof ct.total === "number") ? ct.total : null;
 }
 
 // Pot 1 (seeded) teams for the 2026 draw, held Dec 5 2025 -- the three co-hosts plus the 9
@@ -1040,10 +1145,20 @@ function nonSeededUpsetStatus(teamCode) {
 const DEFAULT_BRACKET_BONUS = 5;
 const BONUS_RULE_POINTS = {
   darkHorseSemi: 20, teamOfTournament: 2, totalGoalsExact: 20, totalGoalsNear: 5,
+  totalCardsExact: 20, totalCardsNear: 5,
   championsGroupExit: -10, goldenBootZeroGoals: -10, goldenBootOneGoal: -5, worstTeamQualifies: -10,
   championsNonSeededLoss: -5, goldenBallRed: -10, goldenBallYellow: -5, goldenBootMissedPenalty: -5,
   trumpHighFive: -100,
 };
+
+// The full fixture count of the prediction game's scope (group stage → final = 104 for WC 2026).
+// Used two ways: (1) the projection denominator for the Total Goals/Cards tables, and (2) the
+// resolution gate for the Total Goals/Cards bonuses -- they stay "pending" until ALL this many
+// fixtures are both present in DATA *and* resolved. The gate is deliberate: it stops the bonuses
+// resolving prematurely at group-stage end if the knockout/results-only fixtures haven't been
+// uploaded yet. KEEP THIS EQUAL TO THE TOTAL NUMBER OF FIXTURES UPLOADED for the game's scope
+// (e.g. drop to 100 if the game stops at the quarter-finals with no semis/final fixtures).
+const TOTAL_TOURNAMENT_GAMES = 104;
 
 // Some bare-surname picks collide with a DIFFERENT real player who happens to share that surname in
 // this tournament. Confirmed for "Doue": Désiré Doué of France (the actual Golden Ball/Young Player
@@ -1069,11 +1184,12 @@ function pickFor(category, player) {
   return raw;
 }
 
-// Phase 2 (deferred, see HANDOVER.md): yellow cards for Golden Ball/Young Player picks, a Golden Boot
-// pick missing an in-play penalty, and Total Tournament Cards have no reliable Wikipedia data source
-// -- confirmed during research (no aggregator page exists for any of these). Left as permanently-
-// pending stub rules rather than silently dropped, so the UI correctly shows "not yet possible"
-// instead of a false 0, and wiring them up later (if a source is ever found) is additive.
+// Phase 2 partly resolved (see HANDOVER.md 7th-session pass): Total Tournament Cards IS now scored
+// -- the ESPN-backed /cards-total Worker route gives a reliable tournament-wide total, so
+// totalTournamentCardsFact() resolves it like goals. Still genuinely deferred (no reliable source):
+// per-player yellow cards for Golden Ball/Young Player picks and a Golden Boot pick missing an
+// in-play penalty -- these stay permanently-pending stubs (manual entry on the Bracket Picks tab is
+// the fallback) rather than a false 0, and wiring them up later (if a source is found) is additive.
 function computeBonusDeductionPoints(player) {
   const items = [];
   const add = (id, label, status, pts) => items.push({ id, label, status, pts: status === "hit" ? pts : 0 });
@@ -1135,7 +1251,18 @@ function computeBonusDeductionPoints(player) {
     else add("totalGoals", "Total Tournament Goals", "miss", 0);
   }
 
-  add("totalCards", "Total Tournament Cards (no data source yet)", "pending", 0); // Phase 2 stub
+  // Total Tournament Cards: +20 exact, +5 within 10%. Resolves at tournament end against the
+  // ESPN-backed grand card total (auto-confirmed). Same shape as Total Tournament Goals above.
+  const totalCardsActual = totalTournamentCardsFact();
+  if (totalCardsActual === null) {
+    add("totalCards", "Total Tournament Cards", "pending", 0);
+  } else {
+    const guess = Number(pickFor("Total Tournament Cards", player));
+    const diffPct = Math.abs(guess - totalCardsActual) / totalCardsActual;
+    if (guess === totalCardsActual) add("totalCards", "Total Tournament Cards (exact)", "hit", BONUS_RULE_POINTS.totalCardsExact);
+    else if (diffPct <= 0.10) add("totalCards", "Total Tournament Cards (within 10%)", "hit", BONUS_RULE_POINTS.totalCardsNear);
+    else add("totalCards", "Total Tournament Cards", "miss", 0);
+  }
 
   // Most/Fewest Goals (Group Stage): +5 each, only once every group's finished.
   const goalsLeaders = groupStageGoalsLeaders(groupStandings);
@@ -1632,14 +1759,19 @@ function renderLeaderboard() {
   const rows = DATA.players.map(p => ({ player: p, ...totals[p] }));
   rows.sort((a, b) => b.total - a.total || a.player.localeCompare(b.player));
 
+  // "Current" matchweek = the last SCORED one. Results-only matchweeks (semis/3rd/final, no
+  // predictions) are skipped entirely from the leaderboard's per-MW columns.
+  let lastScoredMwIndex = -1;
+  DATA.matchweeks.forEach((mw, i) => { if (!mw.resultsOnly) lastScoredMwIndex = i; });
+
   const head = document.getElementById("leaderboard-head");
   head.innerHTML = "<th>#</th><th>Player</th>" +
-    DATA.matchweeks.map((mw, i) => `<th class="num${i < DATA.matchweeks.length - 1 ? ' col-mw-past' : ''}" title="${mw.name}">${matchweekShortLabel(mw.name)}</th>`).join("") +
+    DATA.matchweeks.map((mw, i) => mw.resultsOnly ? "" : `<th class="num${i < lastScoredMwIndex ? ' col-mw-past' : ''}" title="${mw.name}">${matchweekShortLabel(mw.name)}</th>`).join("") +
     `<th class="num" title="Bracket bonus &amp; deduction points (net)">+/- PTS</th><th class="num">Total</th><th class="num col-correct">Correct</th><th class="num col-exact">Exact</th>`;
 
   const maxCorrect = Math.max(...rows.map(r => r.correct));
   const maxExact = Math.max(...rows.map(r => r.exactCount));
-  const mwIsPast = DATA.matchweeks.map((_, mi) => mi < DATA.matchweeks.length - 1);
+  const mwIsPast = DATA.matchweeks.map((_, mi) => mi < lastScoredMwIndex);
   const maxCorrectByMw = DATA.matchweeks.map((_, mi) => Math.max(...rows.map(r => r.correctByMw[mi])));
   const maxExactByMw = DATA.matchweeks.map((_, mi) => Math.max(...rows.map(r => r.exactByMw[mi])));
 
@@ -1647,6 +1779,7 @@ function renderLeaderboard() {
   const closedMwIndices = [];
   let hasOpenMw = false, openMwIndex = -1;
   DATA.matchweeks.forEach((mw, mi) => {
+    if (mw.resultsOnly) return; // results-only MWs never form leaderboard columns or position deltas
     const total = mw.fixtures.length;
     if (total === 0) return;
     const nConfirmed = mw.fixtures.filter((fix, fi) => isFixtureConfirmed(mi, fi, fix)).length;
@@ -1720,6 +1853,7 @@ function renderLeaderboard() {
   body.innerHTML = rows.map((r, i) => {
     const totalClass = r.total > 0 ? "total-pos" : (r.total < 0 ? "total-neg" : "");
     const mwCells = DATA.matchweeks.map((mw, mi) => {
+      if (mw.resultsOnly) return ""; // no leaderboard column for results-only matchweeks
       const past = mwIsPast[mi] ? " mw-past col-mw-past" : "";
       const v = r.byMw[mi] + r.bonusMw[mi];
       const display = `${v > 0 ? "+" : ""}${v}`;
@@ -1811,7 +1945,9 @@ function renderLeaderboard() {
     </tr>`;
   }).join("");
 
-  const totalGames = DATA.matchweeks.reduce((s, mw) => s + mw.fixtures.length, 0);
+  // Only scored fixtures count here -- results-only matchweeks carry no predictions, so they're
+  // not part of the "X of Y resolved (Z pending)" prediction tally.
+  const totalGames = DATA.matchweeks.reduce((s, mw) => s + (mw.resultsOnly ? 0 : mw.fixtures.length), 0);
   const pending = rows[0] ? rows[0].pending : 0;
   const resolved = totalGames - pending;
   document.getElementById("leaderboard-meta").textContent = pending > 0
@@ -1931,6 +2067,16 @@ function renderFixtureRow(mwIndex, fixIndex, fixture) {
   const ov = overrides[key] || {};
   const hVal = ov.h !== undefined ? ov.h : (fixture.actual ? fixture.actual.h : "");
   const aVal = ov.a !== undefined ? ov.a : (fixture.actual ? fixture.actual.a : "");
+
+  // Results-only fixtures have no predictions -- show the score (still live-updatable / enterable
+  // via the Actual cell) and a note spanning the player columns, instead of a prediction grid.
+  if (fixture.resultsOnly) {
+    return `<tr class="results-only-row">
+      <td class="col-fixture">${fixture.home} <span style="color:#aaa;">v</span> ${fixture.away}<div class="kickoff-time">${formatKickoff(fixture.kickoff)}</div></td>
+      <td class="col-actual">${renderActualCell(mwIndex, fixIndex, hVal, aVal)}</td>
+      <td class="results-only-note" colspan="${DATA.players.length}">Results only — counts toward the Goals &amp; Cards totals, not the matchweek leaderboard</td>
+    </tr>`;
+  }
 
   const isConfirmed = isFixtureConfirmed(mwIndex, fixIndex, fixture);
   const cells = DATA.players.map(p => {
@@ -2373,6 +2519,31 @@ const CATEGORY_RULE_IDS = {
 // "ambiguous" flag (a bare pick fuzzy-matching more than one distinct real player, e.g. "Doue" could
 // be either of two different real people -- see distinctMatchingNames) which needs a human to look
 // rather than just waiting, gets shown.
+// For the two live-tracked totals (goals/cards), what each player is currently ON TRACK to score if
+// the projection held -- shown provisionally (amber "+5?") in the Bracket Picks grid until the real
+// bonus resolves at tournament end. Returns { pts, proj } or null (no data / not a totals category).
+function provisionalTotalsBonus(category, player) {
+  const { goals, games } = computeGoalTally();
+  if (!games) return null;
+  let proj, exactKey, nearKey;
+  if (category === "Total Tournament Goals") {
+    proj = Math.round(goals / games * TOTAL_TOURNAMENT_GAMES);
+    exactKey = "totalGoalsExact"; nearKey = "totalGoalsNear";
+  } else if (category === "Total Tournament Cards") {
+    const ct = tournamentFacts.cardsTotal;
+    if (!ct || typeof ct.total !== "number") return null;
+    proj = Math.round(ct.total / games * TOTAL_TOURNAMENT_GAMES);
+    exactKey = "totalCardsExact"; nearKey = "totalCardsNear";
+  } else {
+    return null;
+  }
+  const guess = Number(DATA.bracketPicks.picks[category][player]);
+  if (isNaN(guess) || !proj) return null;
+  const pts = guess === proj ? BONUS_RULE_POINTS[exactKey]
+            : (Math.abs(guess - proj) / proj <= 0.10 ? BONUS_RULE_POINTS[nearKey] : 0);
+  return { pts, proj };
+}
+
 function bracketCellContent(category, player, totals) {
   const ids = CATEGORY_RULE_IDS[category] || [];
   const items = totals[player].bonusDeductionItems.filter(it => ids.includes(it.id));
@@ -2391,9 +2562,16 @@ function bracketCellContent(category, player, totals) {
     return { html: `${pick}<br><span class="bonus-info-box" title="${title}">❓ needs check</span>`, cellClass: "" };
   }
   if (allPending) {
+    // Live-tracked totals (goals/cards): show what they're on track for, amber "+5?", until it
+    // confirms at tournament end. Other pending picks stay plain.
+    const prov = provisionalTotalsBonus(category, player);
+    if (prov && prov.pts > 0) {
+      const provTitle = `Provisional +${prov.pts} (TBC) — on track if the projection (~${prov.proj}) holds; confirmed when the tournament finishes`.replace(/"/g, "&quot;");
+      return { html: `${pick}<br><span class="bonus-info-box bonus-provisional" title="${provTitle}">+${prov.pts}?</span>`, cellClass: "cell-bonus-provisional" };
+    }
     return { html: pick, cellClass: "" };
   }
-  const cellClass = sum > 0 ? "cell-bonus-pos" : (sum < 0 ? "cell-bonus-neg" : "");
+  const cellClass = sum > 0 ? "cell-bonus-pos" : (sum < 0 ? "cell-bonus-neg" : "cell-bonus-neutral");
   const numClass = sum > 0 ? "total-pos" : (sum < 0 ? "total-neg" : "");
   const display = sum === 0 ? "0" : `${sum > 0 ? "+" : ""}${sum}`;
   return { html: `${pick}<br><span class="bonus-info-box ${numClass}" title="${title}">${display}</span>`, cellClass };
@@ -2498,10 +2676,11 @@ function renderBracketTable() {
     </table>
   </div>
   <div class="bracket-extra">
-    <p class="bracket-note">The Total Tournament Cards guess doesn't have a reliable automatic data
-      source (yet), so it's not scored. Yellow cards refresh automatically with live scores; missed
-      penalties have no live-fetchable source but get confirmed manually by Gwil. See the "Bonus
-      Rules" tab for the full list of what's scored and when.</p>
+    <p class="bracket-note">Total Tournament Goals and Cards are both tracked live and scored: the
+      amber <span class="bonus-provisional">+N?</span> shows what a guess is currently on track for if
+      the projection holds (TBC), confirmed when the tournament finishes. Yellow cards refresh
+      automatically with live scores; missed penalties have no live-fetchable source but get confirmed
+      manually by Gwil. See the "Bonus Rules" tab for the full list of what's scored and when.</p>
     ${renderRedCardList(totals)}
     <p class="bracket-note">${cardsPenaltiesNote}</p>
     ${manualFallbacksHtml}
@@ -2523,7 +2702,8 @@ function renderBonusRulesTable() {
     { label: "Best Young Player pick named in the Team of the Tournament (stacks with the line above)", pts: `+${BONUS_RULE_POINTS.teamOfTournament}`, when: "After the Final", scored: true },
     { label: "Total Tournament Goals guessed exactly", pts: `+${BONUS_RULE_POINTS.totalGoalsExact}`, when: "Once every fixture is resolved", scored: true },
     { label: "Total Tournament Goals guessed within 10%", pts: `+${BONUS_RULE_POINTS.totalGoalsNear}`, when: "Once every fixture is resolved", scored: true },
-    { label: "Total Tournament Cards guessed exactly / within 10%", pts: "+20 / +5", when: "No reliable data source exists for a tournament-wide card total", scored: false },
+    { label: "Total Tournament Cards guessed exactly", pts: `+${BONUS_RULE_POINTS.totalCardsExact}`, when: "Once every fixture is resolved", scored: true },
+    { label: "Total Tournament Cards guessed within 10%", pts: `+${BONUS_RULE_POINTS.totalCardsNear}`, when: "Once every fixture is resolved", scored: true },
   ];
   const deductionRows = [
     { label: "Champions pick eliminated in the group stage", pts: `${BONUS_RULE_POINTS.championsGroupExit}`, when: "Once that team's group has finished", scored: true },
@@ -2571,7 +2751,7 @@ function renderPanels() {
   const panels = document.getElementById("panels");
 
   const mwTabs = DATA.matchweeks.map((mw, i) =>
-    `<button class="tab-btn ${i === activeTab ? "active" : ""}" data-tab="${i}" title="${mw.name}">${matchweekShortLabel(mw.name)}</button>`
+    mw.resultsOnly ? "" : `<button class="tab-btn ${i === activeTab ? "active" : ""}" data-tab="${i}" title="${mw.name}">${matchweekShortLabel(mw.name)}</button>`
   ).join("");
   // Bracket Picks stays last (established convention) -- Bonus Rules sits immediately before it,
   // satisfying "next to Bracket Picks" without reordering it out of the last slot.
@@ -2580,7 +2760,7 @@ function renderPanels() {
   tabs.innerHTML = mwTabs + rulesTab + bracketTab;
 
   const mwPanels = DATA.matchweeks.map((mw, i) =>
-    `<div class="mw-panel ${i === activeTab ? "active" : ""}" data-panel="${i}">${renderMatchweekTable(mw, i)}</div>`
+    mw.resultsOnly ? "" : `<div class="mw-panel ${i === activeTab ? "active" : ""}" data-panel="${i}">${renderMatchweekTable(mw, i)}</div>`
   ).join("");
   const rulesPanel = `<div class="mw-panel ${activeTab === "rules" ? "active" : ""}" data-panel="rules">${renderBonusRulesTable()}</div>`;
   const bracketPanel = `<div class="mw-panel ${activeTab === "bracket" ? "active" : ""}" data-panel="bracket">${renderBracketTable()}</div>`;
@@ -3002,6 +3182,22 @@ async function fetchCardCounts() {
   }
 }
 
+// Tournament card grand total, summed server-side across all 48 teams (ESPN core API) by the
+// same Worker, on its /cards-total route. Returns { yellow, red, total, teams, ... } or null.
+// Separate from fetchCardCounts (which is per-player, for bonus scoring) -- this is the single
+// number the Total Tournament Cards prediction table compares against.
+const CARDS_TOTAL_URL = CARDS_RELAY_URL + "cards-total";
+async function fetchCardsTotal() {
+  try {
+    const res = await fetch(CARDS_TOTAL_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d = await res.json();
+    return typeof d.total === "number" ? d : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function fetchAllGroups() {
   const allResults = [];
   const resultsByGroup = {}; // group letter -> [{code1, code2, h, a}] -- feeds computeGroupStandings()
@@ -3142,6 +3338,10 @@ async function fetchLiveScores() {
   const cardCounts = await fetchCardCounts();
   if (cardCounts) tournamentFacts.cardCounts = cardCounts;
 
+  // Tournament card grand total (separate /cards-total route). Same never-wipe-on-failure rule.
+  const cardsTotal = await fetchCardsTotal();
+  if (cardsTotal) tournamentFacts.cardsTotal = cardsTotal;
+
   tournamentFacts.lastFetched = new Date().toISOString();
   saveTournamentFacts(tournamentFacts);
 
@@ -3277,7 +3477,8 @@ async function pollLiveScores() {
   }
 }
 
-let activeTab = DATA.matchweeks.length - 1; // default to the latest matchweek, not the first
+// Default to the latest SCORED matchweek (skip trailing results-only MWs like the semis/final).
+let activeTab = (() => { let last = 0; DATA.matchweeks.forEach((mw, i) => { if (!mw.resultsOnly) last = i; }); return last; })();
 
 // renderPanels() rebuilds every .table-scroll container from scratch via innerHTML, which would
 // otherwise reset scroll position to 0 on every blur-triggered re-render. Deliberately scoped to
@@ -3306,11 +3507,125 @@ function restoreScrollState(state) {
   // visible content stable during layout shifts (shaker card appearing etc.)
 }
 
+// ---- Total Tournament Goals / Cards prediction tables (under the leaderboard) ----
+// Guesses compared against the live running total, plus an "educated guess" projection: current
+// per-game pace extrapolated across TOTAL_TOURNAMENT_GAMES (the game's full scope, defined up by
+// BONUS_RULE_POINTS). Semis/3rd-place/final are uploaded as results-only fixtures (no predictions),
+// so goals/cards count the whole tournament and the bonuses resolve once the final is played.
+
+// Running goal tally + matches played, from whatever scores are live/confirmed right now.
+function computeGoalTally() {
+  let goals = 0, games = 0;
+  DATA.matchweeks.forEach((mw, mi) => {
+    mw.fixtures.forEach((fix, fi) => {
+      const a = getActual(mi, fi, fix);
+      if (a && a.h != null && a.a != null) { goals += a.h + a.a; games++; }
+    });
+  });
+  return { goals, games };
+}
+
+// Collapsed/expanded state per section, kept in a module variable so a live re-render (every
+// fetch rebuilds the card's innerHTML) doesn't snap an expanded section shut. Only has a visible
+// effect on touch devices -- desktop CSS always shows the body. Default collapsed on phones.
+const predOpen = { goals: false, cards: false };
+function togglePred(key) {
+  predOpen[key] = !predOpen[key];
+  const sec = document.querySelector(`.pred-card .pred-section[data-key="${key}"]`);
+  if (sec) sec.classList.toggle("collapsed", !predOpen[key]);
+}
+
+// One prediction section: sorts players by closeness to the projection, highlights the leader.
+function predSectionHTML(opts) {
+  const { key, title, sub, picks, proj, open } = opts;
+  const rows = DATA.players
+    .map(p => ({ player: p, guess: Number(picks[p]) }))
+    .filter(r => !isNaN(r.guess));
+
+  if (proj != null) {
+    rows.forEach(r => { r.diff = r.guess - proj; });
+    rows.sort((a, b) => Math.abs(a.diff) - Math.abs(b.diff) || b.guess - a.guess);
+  } else {
+    rows.sort((a, b) => a.guess - b.guess);
+  }
+
+  const body = rows.map((r, i) => {
+    const closest = proj != null && i === 0;
+    let diffCell = "—", bonusCell = `<span class="pred-miss">—</span>`;
+    if (proj != null) {
+      const d = r.diff;
+      const cls = d > 0 ? "pred-over" : d < 0 ? "pred-under" : "pred-zero";
+      const txt = d > 0 ? `+${d}` : d < 0 ? `${d}` : "spot on";
+      diffCell = `<span class="${cls}">${txt}</span>`;
+      // Provisional bonus: +20 exact, +5 within 10% of the projection. Pending until the end.
+      const pts = r.guess === proj ? 20 : (Math.abs(d) / proj <= 0.10 ? 5 : 0);
+      if (pts > 0) bonusCell = `<span class="pred-bonus">+${pts}</span><span class="pred-pending">pending</span>`;
+    }
+    const tag = closest ? ` <span class="pred-tag">🎯</span>` : "";
+    return `<tr class="${closest ? "pred-closest" : ""}">`
+      + `<td class="pred-rank">${i + 1}</td>`
+      + `<td>${r.player}${tag}</td>`
+      + `<td class="num">${r.guess}</td>`
+      + `<td class="num">${diffCell}</td>`
+      + `<td class="num">${bonusCell}</td>`
+      + `</tr>`;
+  }).join("");
+
+  return `<div class="pred-section${open ? "" : " collapsed"}" data-key="${key}">`
+    + `<div class="pred-head" onclick="togglePred('${key}')"><span class="pred-chevron">▾</span><span>${title}</span></div>`
+    + `<div class="pred-sub">${sub}</div>`
+    + `<div class="pred-body"><table class="pred-table"><thead><tr>`
+    + `<th class="pred-rank"></th><th>Player</th><th class="num">Guess</th><th class="num">vs proj.</th><th class="num">Bonus</th>`
+    + `</tr></thead><tbody>${body}</tbody></table>`
+    + `<div class="pred-foot">Bonus pending — awarded when all fixtures are resolved</div></div>`
+    + `</div>`;
+}
+
+function renderPredictions() {
+  const goalsCard = document.getElementById("goals-pred-card");
+  const cardsCard = document.getElementById("cards-pred-card");
+  if (!goalsCard || !cardsCard) return;
+
+  const { goals, games } = computeGoalTally();
+  const goalsProj = games ? Math.round((goals / games) * TOTAL_TOURNAMENT_GAMES) : null;
+
+  const ct = tournamentFacts.cardsTotal; // { yellow, red, total, ... } or undefined
+  const cardsTotal = ct ? ct.total : null;
+  const cardsProj = (cardsTotal != null && games)
+    ? Math.round((cardsTotal / games) * TOTAL_TOURNAMENT_GAMES) : null;
+
+  const goalsSub = games
+    ? `<b>${goals}</b> goals in <b>${games}</b> games · projected <b class="pred-proj">~${goalsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games`
+    : "no games played yet";
+
+  const cardsSub = ct
+    ? `<b>${ct.total}</b> cards (${ct.yellow}🟨 ${ct.red}🟥) in <b>${games}</b> games · projected <b class="pred-proj">~${cardsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games`
+    : "waiting for live card data…";
+
+  goalsCard.innerHTML = predSectionHTML({
+    key: "goals",
+    open: predOpen.goals,
+    title: "⚽ Total Tournament Goals",
+    sub: goalsSub,
+    picks: DATA.bracketPicks.picks["Total Tournament Goals"],
+    proj: goalsProj,
+  });
+  cardsCard.innerHTML = predSectionHTML({
+    key: "cards",
+    open: predOpen.cards,
+    title: "🟨 Total Tournament Cards",
+    sub: cardsSub,
+    picks: DATA.bracketPicks.picks["Total Tournament Cards"],
+    proj: cardsProj,
+  });
+}
+
 function renderAll() {
   const anchor = document.getElementById('panels');
   const anchorBefore = anchor ? anchor.getBoundingClientRect().top : 0;
   const s = captureScrollState();
   renderLeaderboard();
+  renderPredictions();
   renderNextFixtureCard();
   renderShakerCard();
   renderPanels();

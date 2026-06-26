@@ -3226,7 +3226,7 @@ function renderAll() {
   renderNextFixtureCard();
   renderShakerCard();
   renderPanels();
-  if (anchor) window.scrollBy(0, anchor.getBoundingClientRect().top - anchorBefore);
+  if (anchor && window.scrollY > 50) window.scrollBy(0, anchor.getBoundingClientRect().top - anchorBefore);
   restoreScrollState(s);
 }
 
@@ -3333,9 +3333,9 @@ pollLiveScores(); // immediate first check on page load
 setInterval(pollLiveScores, 5000);
 
 // --- Presence counter ---
-// Only counts sessions where the tab is currently visible (not background/locked phone).
-// Sessions expire from Cloudflare KV after 3 minutes of no pings, so the number reflects
-// people actively looking at the page right now, not just anyone who opened it today.
+// Pings every 10 minutes (KV free tier has a 1,000 put/day limit; 10 min keeps us well under
+// with 17 users). Sessions expire after 15 minutes so missing one ping doesn't immediately
+// drop you from the count. Tab must be visible — background/locked phones don't count.
 (function () {
   let sid = localStorage.getItem('wc2026_sid');
   if (!sid) { sid = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); localStorage.setItem('wc2026_sid', sid); }
@@ -3358,7 +3358,7 @@ setInterval(pollLiveScores, 5000);
   }
 
   ping();
-  setInterval(ping, 30000);
+  setInterval(ping, 600000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') ping(); });
 }());
 </script>

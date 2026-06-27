@@ -596,6 +596,28 @@
     font-size: 13px;
     font-weight: 600;
   }
+  /* Once the user X's the rotate banner it stays gone for 24h (see the dismiss handler) -- this
+     class overrides the portrait media query below that would otherwise re-show it on refresh. */
+  .rotate-banner.rotate-dismissed { display: none !important; }
+  /* Pull-to-refresh indicator -- only wired up in the installed home-screen app (standalone). */
+  #ptr-indicator {
+    position: fixed; top: -6px; left: 50%;
+    transform: translateX(-50%) translateY(0);
+    z-index: 2000;
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    background: #fff; border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    color: var(--header-bg); font-size: 19px; font-weight: 700; line-height: 1;
+    opacity: 0; pointer-events: none;
+    transition: opacity .15s ease;
+  }
+  #ptr-indicator.ptr-ready { color: #22a855; }
+  #ptr-indicator.ptr-refreshing { animation: ptr-spin 0.7s linear infinite; }
+  @keyframes ptr-spin {
+    from { transform: translateX(-50%) translateY(46px) rotate(0deg); }
+    to   { transform: translateX(-50%) translateY(46px) rotate(360deg); }
+  }
   .rotate-icon {
     display: inline-block;
     height: 26px;
@@ -3749,10 +3771,83 @@ document.getElementById("reset-btn").addEventListener("click", () => {
   }
 });
 
+// Rotate banner: dismissing it (the X) hides it for 24h, persisted in localStorage, so it doesn't
+// pop back up on every refresh. It re-shows once a day in case a new viewer is on the device.
+const ROTATE_DISMISS_KEY = "rotateBannerDismissedAt";
+const ROTATE_DISMISS_MS = 24 * 60 * 60 * 1000;
+(function () {
+  try {
+    const at = Number(localStorage.getItem(ROTATE_DISMISS_KEY) || 0);
+    if (at && Date.now() - at < ROTATE_DISMISS_MS) {
+      document.getElementById("rotate-banner").classList.add("rotate-dismissed");
+    }
+  } catch (_) {}
+})();
 document.getElementById("rotate-dismiss").addEventListener("click", () => {
-  document.getElementById("rotate-banner").style.display = "none";
+  document.getElementById("rotate-banner").classList.add("rotate-dismissed");
+  try { localStorage.setItem(ROTATE_DISMISS_KEY, String(Date.now())); } catch (_) {}
 });
 document.getElementById("rotate-mug").src = getGwilMugSrc();
+
+// Pull-to-refresh -- only in the installed home-screen app (standalone display mode), where the
+// browser's own pull-to-refresh gesture isn't available. Pull down from the very top to re-fetch
+// results (same as tapping "Refresh results").
+(function () {
+  const standalone = window.matchMedia("(display-mode: standalone)").matches
+    || window.navigator.standalone === true;
+  if (!standalone) return;
+
+  const ind = document.createElement("div");
+  ind.id = "ptr-indicator";
+  ind.textContent = "↻";
+  document.body.appendChild(ind);
+
+  const THRESHOLD = 70;
+  let startY = 0, active = false, dist = 0, refreshing = false;
+
+  const reset = () => {
+    ind.classList.remove("ptr-ready", "ptr-refreshing");
+    ind.style.transform = "translateX(-50%) translateY(0)";
+    ind.style.opacity = "0";
+  };
+
+  window.addEventListener("touchstart", (e) => {
+    if (refreshing) return;
+    active = window.scrollY <= 0 && e.touches.length === 1;
+    startY = active ? e.touches[0].clientY : 0;
+    dist = 0;
+  }, { passive: true });
+
+  window.addEventListener("touchmove", (e) => {
+    if (!active || refreshing) return;
+    dist = e.touches[0].clientY - startY;
+    if (dist > 0 && window.scrollY <= 0) {
+      const pull = Math.min(dist * 0.5, 90);
+      ind.style.transform = `translateX(-50%) translateY(${pull}px) rotate(${dist * 1.8}deg)`;
+      ind.style.opacity = String(Math.min(dist / THRESHOLD, 1));
+      ind.classList.toggle("ptr-ready", dist >= THRESHOLD);
+    } else if (dist <= 0) {
+      active = false; reset();
+    }
+  }, { passive: true });
+
+  window.addEventListener("touchend", () => {
+    if (!active || refreshing) return;
+    active = false;
+    if (dist >= THRESHOLD) {
+      refreshing = true;
+      ind.classList.remove("ptr-ready");
+      ind.classList.add("ptr-refreshing");
+      ind.style.opacity = "1";
+      const btn = document.querySelector(".js-fetch-btn");
+      if (btn) btn.click();
+      else if (typeof fetchLiveScores === "function") fetchLiveScores();
+      setTimeout(() => { refreshing = false; reset(); }, 1600);
+    } else {
+      reset();
+    }
+  }, { passive: true });
+}());
 
 // Tap-to-reveal info tooltips -- everywhere a score/badge carries extra detail via its `title`
 // attribute (matchweek-winner/live-lead boxes, most-correct/most-exact badges, the per-matchweek

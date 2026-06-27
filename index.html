@@ -28,6 +28,12 @@
     --accent: #2b5cab;
   }
   * { box-sizing: border-box; }
+  html {
+    /* Stop iOS Safari auto-inflating text blocks in landscape ("text autosizing") -- that's what
+       made some fonts look bigger in landscape than portrait. Keep text at its CSS size in both. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     margin: 0;

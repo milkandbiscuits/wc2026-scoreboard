@@ -636,9 +636,9 @@
   }
   #next-fixture-card .table-scroll { padding-bottom: 0; }
   @media (max-width: 1024px) and (orientation: landscape) {
-    /* Note fonts stay compact in landscape to fit; the M&S subtitle now matches portrait (12px)
-       rather than bloating to 15px. */
-    #shaker-card .whatif-note,
+    /* Only the Next Fixture card's notes stay compact in landscape (that card is hidden in portrait
+       anyway). The M&S card's subtitle and blurb now match portrait (12px / 12.5px) so nothing
+       changes size when you rotate. */
     #next-fixture-card .whatif-note,
     #next-fixture-card .fixture-note { font-size: 9px; font-weight: 500; }
   }

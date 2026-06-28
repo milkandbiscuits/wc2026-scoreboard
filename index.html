@@ -580,6 +580,38 @@
     background: #eef3fc;
     border-top: 1px solid var(--border);
   }
+  /* "Gwil's MW Wrap" — compact end-of-matchweek recaps. The newest is expanded; earlier closed MWs
+     collapse to a clickable header bar (latest stays open). Desktop shows them as a grid of tiles,
+     all expanded. Each .mw-wrap-card is a normal .card; #mw-summary-card is just their container. */
+  .mw-wrap-card { margin-bottom: 12px; }
+  .mw-wraps .mw-wrap-card:last-child { margin-bottom: 0; }
+  .mw-wraps-archive-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #888; margin: 4px 2px 10px; }
+  .mw-wrap-head { cursor: pointer; user-select: none; }
+  .mw-wrap-headright { display: inline-flex; align-items: center; gap: 8px; }
+  .mw-wrap-chev { color: #aaa; font-size: 12px; transition: transform .15s; }
+  .mw-wrap-card.collapsed .mw-wrap-head { border-bottom: none; }
+  .mw-wrap-card.collapsed .mw-wrap-chev { transform: rotate(-90deg); }
+  .mw-wraps .mw-wrap-card.collapsed .mw-wrap-body { display: none; }
+  .mw-wraps .mw-wrap-body { padding: 11px 18px 13px; display: flex; flex-direction: column; gap: 6px; }
+  .mw-wraps .mw-wrap-row { font-size: 13px; color: #333; line-height: 1.35; }
+  .mw-wraps .mw-wrap-row b { color: var(--header-bg); font-weight: 700; }
+  .mw-wraps .mw-wrap-pos { color: #22a855; font-weight: 700; }
+  .mw-wraps .mw-wrap-neg { color: #e05555; font-weight: 700; }
+  .mw-wraps .mw-wrap-quip { margin: 3px 0 0; font-size: 12.5px; font-style: italic; color: #777; }
+  /* Desktop: ONLY the top wraps slot becomes a grid of expanded tiles. The bottom archive (shown once
+     a round is live) stays a collapsible stack on every viewport. */
+  @media (min-width: 900px) and (pointer: fine) {
+    #mw-summary-card { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; align-items: start; }
+    #mw-summary-card .mw-wrap-card { margin-bottom: 0; }
+    #mw-summary-card .mw-wrap-head { cursor: default; }
+    #mw-summary-card .mw-wrap-chev { display: none; }
+    #mw-summary-card .mw-wrap-card.collapsed .mw-wrap-body { display: flex; }
+    #mw-summary-card .mw-wrap-card.collapsed .mw-wrap-head { border-bottom: 1px solid var(--border); }
+  }
+  @media (max-width: 700px) and (orientation: portrait) {
+    .mw-wraps .mw-wrap-body { padding: 9px 14px 11px; gap: 5px; }
+    .mw-wraps .mw-wrap-row { font-size: 12.5px; }
+  }
   .header-top { display: flex; align-items: center; gap: 16px; }
   .gwil-mug-wrap {
     position: relative;
@@ -745,6 +777,7 @@
 
 <div class="container">
 
+  <div id="mw-summary-card" class="mw-wraps" style="display:none;"></div>
   <div class="card" id="shaker-card" style="display:none;"></div>
   <div class="card next-fixture-card" id="next-fixture-card"></div>
   <div class="card compact-fixture-banner" id="compact-fixture-banner"></div>
@@ -793,6 +826,8 @@
       results that can be trusted, not results Gwil has fiddled to win.
     </p>
   </div>
+
+  <div id="mw-wraps-bottom" class="mw-wraps" style="display:none;"></div>
 
   <p class="footer-note">
     Scores you type in are saved to this browser only - they don't sync to anyone else's, including Gwil's, so tinker
@@ -2771,6 +2806,8 @@ function buildLastFixtureText() {
 
 function renderShakerCard() {
   const el = document.getElementById("shaker-card");
+  // Stand down while the MW Wrap owns the top (matchweek just closed, next round not yet kicked off).
+  if (activeWrapMwIndex() >= 0) { el.style.display = "none"; return; }
   // Hide while matches are live — M&S shows last results, which is less relevant mid-match
   if (pinnedNextKickoff) {
     const now = Date.now();
@@ -2796,6 +2833,147 @@ function renderShakerCard() {
   el.innerHTML = `
     <div class="card-title">Gwil's Movers &amp; Shakers <span style="font-weight:400;color:#999;font-size:12px;">(${resultLabel})</span><span class="meta">${metaScores} · ${mwName}</span></div>
     <p class="whatif-note">${text}${scenarioText ? `<br><br>${scenarioText}` : ''}</p>`;
+}
+
+// "Gwil's [MW] Wrap" — a compact recap that appears once a scored matchweek is fully closed, summing
+// up the winner, sharpest predictors, biggest movers and the table shake-up in ~6 scannable lines
+// (deliberately one-screen, no scroll). Auto-generated for ANY matchweek (group rounds or knockouts),
+// always showing the most-recently-completed one. Cached by matchweek index so it doesn't recompute
+// on every live re-render. Sits above the Movers & Shakers card (last-result recap).
+// The Wrap and Movers & Shakers cards take turns: the Wrap owns the top from the moment a matchweek
+// CLOSES until the next round's first game KICKS OFF; M&S owns it the rest of the time (live play and
+// between-game last-result recaps). This returns the matchweek index the Wrap should recap, or -1 if
+// the Wrap shouldn't show (no closed MW yet, or the next round has already kicked off — M&S's turn).
+function activeWrapMwIndex() {
+  let mi = -1;
+  DATA.matchweeks.forEach((mw, i) => {
+    if (mw.resultsOnly) return;
+    const anyScored = mw.fixtures.some(f => !f.resultsOnly);
+    const allDone = mw.fixtures.every((f, fi) => f.resultsOnly || getActual(i, fi, f));
+    if (anyScored && allDone) mi = i;
+  });
+  if (mi < 0) return -1;
+  const now = Date.now();
+  const nextRoundKickedOff = DATA.matchweeks.some((mw, i) =>
+    i > mi && mw.fixtures.some(f => f.kickoff && new Date(f.kickoff).getTime() <= now));
+  return nextRoundKickedOff ? -1 : mi;
+}
+
+// Build the inner recap (meta label + body rows) for ONE closed matchweek. Cached per index — a
+// closed matchweek's recap never changes, and we may render several at once (the wraps archive).
+const _mwWrapInnerCache = {};
+function buildMwWrapInner(mi) {
+  if (_mwWrapInnerCache[mi]) return _mwWrapInnerCache[mi];
+  const sumVals = o => Object.values(o).reduce((a, b) => a + (b || 0), 0);
+  const totals = computeTotals();
+  const nFix = DATA.matchweeks[mi].fixtures.filter(f => !f.resultsOnly).length;
+  const nm = p => `<b>${p}</b>`;
+
+  // Winner = the matchweek-bonus recipient (top scorer that week); show co-winners if tied.
+  const winners = DATA.players.filter(p => (totals[p].bonusMw[mi] || 0) > 0)
+    .sort((a, b) => totals[b].byMw[mi] - totals[a].byMw[mi]);
+  const winner = winners[0] || DATA.players.slice().sort((a, b) => totals[b].byMw[mi] - totals[a].byMw[mi])[0];
+  const winnerExtra = winners.length > 1 ? ` &amp; ${winners.length - 1} more` : "";
+
+  // Most exact scores / most correct results that week.
+  const maxExact = Math.max(...DATA.players.map(p => totals[p].exactByMw[mi] || 0));
+  const exactLeaders = DATA.players.filter(p => (totals[p].exactByMw[mi] || 0) === maxExact);
+  const maxCorrect = Math.max(...DATA.players.map(p => totals[p].correctByMw[mi] || 0));
+  const correctLeaders = DATA.players.filter(p => (totals[p].correctByMw[mi] || 0) === maxCorrect);
+
+  // Pick of the week = the single biggest doubled-exact haul in the matchweek.
+  let pick = null;
+  DATA.matchweeks[mi].fixtures.forEach((f, fi) => {
+    if (f.resultsOnly) return;
+    const a = getActual(mi, fi, f); if (!a) return;
+    DATA.players.forEach(p => {
+      const pr = f.predictions[p];
+      if (pr && a.h === pr.h && a.a === pr.a && (!pick || pr.stake * 2 > pick.pts)) {
+        pick = { p, pts: pr.stake * 2, fix: `${f.home} ${a.h}–${a.a} ${f.away}` };
+      }
+    });
+  });
+
+  // Biggest climber / faller vs the previous scored matchweek (by cumulative match points + MW bonus).
+  // Snapshots: league standings (cumulative match points + MW-win bonus) AS AT the close of a given
+  // matchweek, so each wrap reflects the table at that moment (not "now"), and movers compare this MW
+  // with the previous one. Bracket bonuses are excluded — they resolve later (group-stage end), so
+  // including them here would be anachronistic for the earlier wraps.
+  const keysUpto = up => { const s = new Set(); DATA.matchweeks.forEach((mw, i) => { if (i <= up && !mw.resultsOnly) mw.fixtures.forEach((f, fi) => { if (!f.resultsOnly) s.add(fixtureKey(i, fi)); }); }); return s; };
+  const snapAt = up => { const t = computeTotals(undefined, keysUpto(up)); return DATA.players.map(p => ({ p, v: sumVals(t[p].byMw) + sumVals(t[p].bonusMw) })).sort((a, b) => b.v - a.v || a.p.localeCompare(b.p)); };
+  const rankOf = arr => { const m = {}; arr.forEach((x, k) => m[x.p] = k + 1); return m; };
+  const scoredIdxs = []; DATA.matchweeks.forEach((mw, i) => { if (!mw.resultsOnly) scoredIdxs.push(i); });
+  const prevIdx = scoredIdxs.indexOf(mi) > 0 ? scoredIdxs[scoredIdxs.indexOf(mi) - 1] : null;
+  const thisSnap = snapAt(mi), thisRank = rankOf(thisSnap);
+  let moverUp = null, moverDown = null;
+  if (prevIdx !== null) {
+    const before = rankOf(snapAt(prevIdx));
+    let bestUp = 0, bestDown = 0;
+    DATA.players.forEach(p => { const d = before[p] - thisRank[p]; if (d > bestUp) { bestUp = d; moverUp = { p, d }; } if (d < bestDown) { bestDown = d; moverDown = { p, d }; } });
+  }
+  const leader = thisSnap[0], bottom = thisSnap[thisSnap.length - 1];
+  const gIdx = thisRank["Gwil"] - 1;
+  const gGap = leader.v - thisSnap.find(s => s.p === "Gwil").v;
+
+  const quip = winner === "Gwil"
+    ? "The house cleans up — Gwil makes the rules, remember. 💰"
+    : gIdx === 0 ? "Gwil's top of his own game. Someone, anyone, do something."
+    : (moverDown && moverDown.p === "Gwil") ? "Rough week for the bookmaker — strike while he's down. 😬"
+    : gIdx < 3 ? "Gwil's lurking near the top. Don't get comfortable."
+    : `Gwil sits #${gIdx + 1}, ${gGap} off the pace — the house is beatable.`;
+
+  const rows = [];
+  rows.push(`🏆 <b>Winner:</b> ${nm(winner)}${winnerExtra} — <b>${totals[winner].byMw[mi]} pts</b> <span class="mw-wrap-pos">+${MATCHWEEK_WINNER_BONUS}</span>`);
+  const sharp = maxExact > 0 ? `🎯 <b>Sharpest:</b> ${nm(exactLeaders[0])}${exactLeaders.length > 1 ? ` +${exactLeaders.length - 1}` : ""} — ${maxExact} exact &nbsp;·&nbsp; ` : "";
+  rows.push(`${sharp}✅ <b>Most right:</b> ${correctLeaders.length > 1 ? `${maxCorrect}/${nFix} (${correctLeaders.length} players)` : `${nm(correctLeaders[0])} (${maxCorrect}/${nFix})`}`);
+  if (pick) rows.push(`💰 <b>Pick of the week:</b> ${nm(pick.p)} called ${pick.fix} <span class="mw-wrap-pos">+${pick.pts}</span>`);
+  if (moverUp || moverDown) rows.push(`${moverUp ? `📈 ${nm(moverUp.p)} <span class="mw-wrap-pos">↑${moverUp.d}</span>` : ""}${moverUp && moverDown ? " &nbsp;·&nbsp; " : ""}${moverDown ? `📉 ${nm(moverDown.p)} <span class="mw-wrap-neg">↓${-moverDown.d}</span>` : ""}`);
+  const gwilMid = gIdx === 0
+    ? `${nm("Gwil")} tops it, +${leader.v - (thisSnap[1] ? thisSnap[1].v : leader.v)} clear`
+    : `${nm(leader.p)} top &nbsp;·&nbsp; Gwil #${gIdx + 1} (${gGap > 0 ? "−" + gGap + " pts" : "level"})`;
+  rows.push(`🪑 ${gwilMid} &nbsp;·&nbsp; ${nm(bottom.p)} bottom`);
+
+  const body = `${rows.map(r => `<div class="mw-wrap-row">${r}</div>`).join("")}<p class="mw-wrap-quip">${quip}</p>`;
+  const result = { meta: `${nFix} games`, body };
+  _mwWrapInnerCache[mi] = result;
+  return result;
+}
+
+// Tracks which wraps the user has toggled open/closed (by MW index); the newest closed MW defaults
+// open, earlier ones collapsed. On desktop CSS forces them all open as a grid of tiles instead.
+const mwWrapOpen = {};
+function renderMwWraps() {
+  const top = document.getElementById("mw-summary-card");
+  const bottom = document.getElementById("mw-wraps-bottom");
+  const closed = [];
+  DATA.matchweeks.forEach((mw, i) => {
+    if (mw.resultsOnly) return;
+    const anyScored = mw.fixtures.some(f => !f.resultsOnly);
+    const allDone = mw.fixtures.every((f, fi) => f.resultsOnly || getActual(i, fi, f));
+    if (anyScored && allDone) closed.push(i);
+  });
+  if (!closed.length) { top.style.display = "none"; bottom.style.display = "none"; top.innerHTML = bottom.innerHTML = ""; return; }
+  closed.reverse(); // newest first
+  const newest = closed[0];
+  // Between a matchweek closing and the next round kicking off, the wraps own the TOP (newest open,
+  // M&S stood down). Once the next round kicks off they all collapse and move to the BOTTOM (below the
+  // fixtures) as a browsable archive, and M&S takes the top back.
+  const atTop = activeWrapMwIndex() >= 0;
+  const target = atTop ? top : bottom;
+  const other = atTop ? bottom : top;
+  other.style.display = "none"; other.innerHTML = "";
+
+  const cards = closed.map(mi => {
+    const open = mi in mwWrapOpen ? mwWrapOpen[mi] : (atTop && mi === newest); // at the bottom: all collapsed
+    const inner = buildMwWrapInner(mi);
+    const metaText = (atTop && mi === newest ? "matchweek closed · " : "") + inner.meta;
+    return `<div class="card mw-wrap-card${open ? "" : " collapsed"}" data-mw="${mi}">
+      <div class="card-title mw-wrap-head" role="button" tabindex="0" aria-expanded="${open}">Gwil's ${DATA.matchweeks[mi].name} Wrap<span class="mw-wrap-headright"><span class="meta">${metaText}</span><span class="mw-wrap-chev" aria-hidden="true">▾</span></span></div>
+      <div class="mw-wrap-body">${inner.body}</div>
+    </div>`;
+  }).join("");
+  target.innerHTML = (atTop ? "" : `<div class="mw-wraps-archive-title">Matchweek wraps</div>`) + cards;
+  target.style.display = "";
 }
 
 // Which BONUS_RULES item id(s) feed each bracket category's status badge -- a category can have more
@@ -3958,6 +4136,7 @@ function renderAll() {
   renderLeaderboard();
   renderPredictions();
   renderNextFixtureCard();
+  renderMwWraps();
   renderShakerCard();
   renderPanels();
   if (anchor && window.scrollY > 50) window.scrollBy(0, anchor.getBoundingClientRect().top - anchorBefore);
@@ -4112,6 +4291,27 @@ document.addEventListener("click", (e) => {
 // capture phase) or resize invalidates it, so just dismiss rather than tracking and re-positioning.
 window.addEventListener("scroll", hideTapTooltip, true);
 window.addEventListener("resize", hideTapTooltip);
+
+// Expand/collapse a matchweek wrap by tapping its header (touch only — desktop shows all as a grid).
+// One delegated listener (the cards are rebuilt each render); collapse state lives in mwWrapOpen so it
+// survives re-renders. Toggling the class directly avoids a full re-render (no scroll jump).
+function toggleMwWrap(head) {
+  const card = head.closest(".mw-wrap-card");
+  if (!card) return;
+  card.classList.toggle("collapsed");
+  const open = !card.classList.contains("collapsed");
+  mwWrapOpen[+card.dataset.mw] = open;
+  head.setAttribute("aria-expanded", open);
+}
+document.addEventListener("click", (e) => {
+  const head = e.target.closest(".mw-wrap-head");
+  if (head) toggleMwWrap(head);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const head = e.target.closest(".mw-wrap-head");
+  if (head) { e.preventDefault(); toggleMwWrap(head); }
+});
 
 renderAll();
 fetchLiveScores(); // auto-check Wikipedia for the latest results as soon as the page loads, no click needed

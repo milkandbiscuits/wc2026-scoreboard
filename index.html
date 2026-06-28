@@ -261,6 +261,7 @@
   .pred-card .pred-chevron { display: none; font-size: 13px; color: #1b66c9; transition: transform .15s ease; }
   .pred-card .pred-tap-hint { display: none; }
   .pred-rule { color: #b8860b; font-weight: 700; white-space: nowrap; }
+  .pred-manual { color: #999; font-style: italic; white-space: nowrap; }
   /* Collapsible only on touch devices (phones/tablets, either orientation). Desktop (fine
      pointer) always shows everything and the chevron/hint stay hidden. On touch the header is
      styled as an obvious tappable bar with a "tap to open/close" hint. */
@@ -383,6 +384,12 @@
     cursor: help;
   }
   .bonus-info-box { cursor: help; border-bottom: 1px dotted currentColor; }
+  /* +/- PTS cell: net number with the small gross +/- stacked to its right (offsetting case). */
+  .bonus-cell { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; }
+  .bonus-net { line-height: 1; }
+  .bonus-split { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1; font-size: 8.5px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+  .bps-pos { color: #22a855; }
+  .bps-neg { color: #e05555; }
   #tap-tooltip {
     position: fixed;
     display: none;
@@ -1088,10 +1095,29 @@ function totalTournamentGoalsFact() {
   return complete ? sum : null;
 }
 
-// Total Tournament Cards -- the grand card total from the ESPN-backed Worker
-// (tournamentFacts.cardsTotal, full-tournament, fixture-independent). Resolved on the SAME gate as
-// goals: only final once every fixture is present and resolved (i.e. the tournament's done). Auto-
-// confirmed from ESPN; the number can still be sanity-checked/queried after the fact if needed.
+// MANUAL CARD-TOTAL OVERRIDE. ESPN's feed lags AND undercounts the real card count, and no other
+// source is auto-readable (FBref/SofaScore/ESPN-web block bots; FootyStats/Footiqo render client-
+// side). So when ESPN is off, set the current figure here BY HAND -- read it from any stats site in
+// a real browser (e.g. My Football Facts / Footiqo / ESPN discipline) and drop it in. It then
+// supersedes the live ESPN feed everywhere (mini-league total, projection, and the end-of-tournament
+// bonus). Set back to `null` to return to the automatic ESPN feed. `asOf` is shown to viewers so the
+// manual figure stays honest. Update the numbers (and asOf) whenever you have a fresher count.
+//   Format when active: { yellow: 205, red: 10, total: 215, games: 66, asOf: "27 Jun" }
+//   Currently null -- using the automatic ESPN feed (it caught up to 66 games on 27 Jun). Flip to a
+//   figure if a more trusted source disagrees (e.g. ESPN was found to undercount yellows vs others).
+const MANUAL_CARDS_OVERRIDE = null;
+
+// The card total the app should use: the manual override when set, otherwise the live ESPN feed.
+function getCardsTotal() {
+  if (MANUAL_CARDS_OVERRIDE && typeof MANUAL_CARDS_OVERRIDE.total === "number") {
+    return { ...MANUAL_CARDS_OVERRIDE, manual: true };
+  }
+  return tournamentFacts.cardsTotal;
+}
+
+// Total Tournament Cards -- the grand card total (manual override if set, else the ESPN-backed
+// Worker). Resolved on the SAME gate as goals: only final once every fixture is present and
+// resolved (i.e. the tournament's done).
 function totalTournamentCardsFact() {
   let totalFixtures = 0, resolvedFixtures = 0;
   DATA.matchweeks.forEach((mw, mwIndex) => {
@@ -1101,7 +1127,7 @@ function totalTournamentCardsFact() {
     });
   });
   const complete = resolvedFixtures === totalFixtures && totalFixtures === TOTAL_TOURNAMENT_GAMES;
-  const ct = tournamentFacts.cardsTotal;
+  const ct = getCardsTotal();
   return (complete && ct && typeof ct.total === "number") ? ct.total : null;
 }
 
@@ -1805,7 +1831,7 @@ function renderLeaderboard() {
   const head = document.getElementById("leaderboard-head");
   head.innerHTML = "<th>#</th><th>Player</th>" +
     DATA.matchweeks.map((mw, i) => mw.resultsOnly ? "" : `<th class="num${i < lastScoredMwIndex ? ' col-mw-past' : ''}" title="${mw.name}">${matchweekShortLabel(mw.name)}</th>`).join("") +
-    `<th class="num" title="Bracket bonus &amp; deduction points (net)">+/- PTS</th><th class="num">Total</th><th class="num col-correct">Correct</th><th class="num col-exact">Exact</th>`;
+    `<th class="num" title="Bonus points (net): matchweek wins + bracket bonus &amp; deductions">+/- PTS</th><th class="num">Total</th><th class="num col-correct">Correct</th><th class="num col-exact">Exact</th>`;
 
   const maxCorrect = Math.max(...rows.map(r => r.correct));
   const maxExact = Math.max(...rows.map(r => r.exactCount));
@@ -1857,7 +1883,21 @@ function renderLeaderboard() {
   // CLOSED / between MWs: overall shift from previous closed MW to latest closed MW.
   const prevRankByPlayer = {}, afterRankByPlayerConfirmed = {};
   {
-    if (hasOpenMw) {
+    // During LIVE play -- an unconfirmed (non-results-only) fixture has a live or hypothetical score
+    // entered -- the table re-sorts by the live total, so the arrows must reflect THAT movement, or
+    // they'd point against the visible re-sort (the bug: arrows frozen on confirmed-only ranks while
+    // rows jump around live). Compare the current live standings to the all-confirmed baseline.
+    const liveActive = allFixturesChronological().some(f =>
+      !f.fixture.resultsOnly && !isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture)
+      && getActual(f.mwIndex, f.fixIndex, f.fixture));
+    if (liveActive) {
+      const confirmedKeys = new Set();
+      allFixturesChronological().forEach(f => {
+        if (isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture)) confirmedKeys.add(f.key);
+      });
+      rankPlayers(computeTotals(undefined, confirmedKeys)).forEach(r => { prevRankByPlayer[r.player] = r.rank; });
+      rankPlayers(totals).forEach(r => { afterRankByPlayerConfirmed[r.player] = r.rank; }); // current live ranks
+    } else if (hasOpenMw) {
       const allChron = allFixturesChronological();
       let lastKickoff = null;
       allChron.forEach(f => { if (isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture)) lastKickoff = f.fixture.kickoff; });
@@ -1893,7 +1933,7 @@ function renderLeaderboard() {
     const mwCells = DATA.matchweeks.map((mw, mi) => {
       if (mw.resultsOnly) return ""; // no leaderboard column for results-only matchweeks
       const past = mwIsPast[mi] ? " mw-past col-mw-past" : "";
-      const v = r.byMw[mi] + r.bonusMw[mi];
+      const v = r.byMw[mi]; // raw matchweek score -- the MW-win bonus now lives in the +/- PTS column
       const display = `${v > 0 ? "+" : ""}${v}`;
       const cLeadMw = past && maxCorrectByMw[mi] > 0 && r.correctByMw[mi] === maxCorrectByMw[mi];
       const eLeadMw = past && maxExactByMw[mi] > 0 && r.exactByMw[mi] === maxExactByMw[mi];
@@ -1927,7 +1967,7 @@ function renderLeaderboard() {
       const posBadge = `${rankBadge}${arrowBadge}`;
       const openBadgeClass = (isOpenMwCell && posBadge) ? " mw-open-badge" : "";
       if (r.bonusMw[mi] > 0) {
-        return `<td class="num${past}${openBadgeClass}"><span style="white-space:nowrap"><span class="mw-leader-box" title="Matchweek winner: +${MATCHWEEK_WINNER_BONUS} bonus included">${display}</span>${posBadge}</span>${statBadge}</td>`;
+        return `<td class="num${past}${openBadgeClass}"><span style="white-space:nowrap"><span class="mw-leader-box" title="Matchweek winner — +${MATCHWEEK_WINNER_BONUS} bonus, shown in the +/- PTS column">${display}</span>${posBadge}</span>${statBadge}</td>`;
       }
       if (r.liveLeadMw[mi]) {
         return `<td class="num${past}${openBadgeClass}"><span style="white-space:nowrap"><span class="mw-live-lead-box" title="Currently leading this matchweek — bonus not awarded until every fixture is resolved">${display}</span>${posBadge}</span>${statBadge}</td>`;
@@ -1957,13 +1997,27 @@ function renderLeaderboard() {
       ? `<span class="stat-leader-medal" title="Most exact scores">✦${r.exactCount}</span>`
       : `<span class="exact-suffix-plain" title="Exact scores">✦${r.exactCount}</span>`;
     const exactSuffixHtml = `<span class="correct-exact-suffix">${exactSuffixInner}</span>`;
-    const bonusV = r.bonusDeductionPts;
-    const bonusDisplay = `${bonusV > 0 ? "+" : ""}${bonusV}`;
-    const bonusCls = bonusV > 0 ? "total-pos" : (bonusV < 0 ? "total-neg" : "");
-    const bonusHits = r.bonusDeductionItems.filter(it => it.status === "hit");
-    const bonusCell = bonusHits.length
-      ? `<span class="bonus-info-box" title="${bonusHits.map(it => `${it.label}: ${it.pts > 0 ? "+" : ""}${it.pts}`).join("; ").replace(/"/g, "&quot;")}">${bonusDisplay}</span>`
-      : bonusDisplay;
+    // +/- PTS = ALL bonus points: matchweek wins + bracket bonus/deductions (the player's total
+    // already includes both -- this just gathers them for display). When + and - scores offset, the
+    // bare net would hide them, so the small gross +/- are stacked to the right of the net, and the
+    // full breakdown shows on hover/tap of the net number.
+    const mwWinItems = DATA.matchweeks
+      .map((mw, mi) => ({ pts: r.bonusMw[mi] || 0, label: `${mw.name} win` }))
+      .filter(x => x.pts > 0);
+    const bonusItemsAll = [...mwWinItems, ...r.bonusDeductionItems.filter(it => it.status === "hit").map(it => ({ pts: it.pts, label: it.label }))];
+    const grossPos = bonusItemsAll.filter(it => it.pts > 0).reduce((s, it) => s + it.pts, 0);
+    const grossNeg = bonusItemsAll.filter(it => it.pts < 0).reduce((s, it) => s + it.pts, 0);
+    const bonusNet = grossPos + grossNeg;
+    const netCls = bonusNet > 0 ? "total-pos" : (bonusNet < 0 ? "total-neg" : "");
+    const netDisplay = bonusNet > 0 ? `+${bonusNet}` : `${bonusNet}`;
+    const bonusTitle = bonusItemsAll.map(it => `${it.label}: ${it.pts > 0 ? "+" : ""}${it.pts}`).join("; ").replace(/"/g, "&quot;");
+    const netSpan = bonusItemsAll.length
+      ? `<span class="bonus-net bonus-info-box ${netCls}" title="${bonusTitle}">${netDisplay}</span>`
+      : `<span class="bonus-net ${netCls}">${netDisplay}</span>`;
+    const splitSpan = (grossPos > 0 && grossNeg < 0)
+      ? `<span class="bonus-split"><span class="bps-pos">+${grossPos}</span><span class="bps-neg">${grossNeg}</span></span>`
+      : "";
+    const bonusCell = `<span class="bonus-cell">${netSpan}${splitSpan}</span>`;
     const prevRank = prevRankByPlayer[r.player];
     const afterRank = afterRankByPlayerConfirmed[r.player];
     const rankDelta = (prevRank !== undefined && afterRank !== undefined) ? prevRank - afterRank : 0;
@@ -1976,7 +2030,7 @@ function renderLeaderboard() {
       <td><span class="rank-badge">${i + 1}</span></td>
       <td class="col-player-lb">${rankMoveHtml}${playerLabel(r.player, "leaderboard-mug")}</td>
       ${mwCells}
-      <td class="num ${bonusCls}">${bonusCell}</td>
+      <td class="num">${bonusCell}</td>
       <td class="num ${totalClass}">${r.total > 0 ? "+" : ""}${r.total}</td>
       <td class="num col-correct">${correctCell}${exactSuffixHtml}</td>
       <td class="num col-exact">${exactCell}</td>
@@ -2639,7 +2693,7 @@ function provisionalTotalsBonus(category, player) {
     proj = Math.round(goals / games * TOTAL_TOURNAMENT_GAMES);
     exactKey = "totalGoalsExact"; nearKey = "totalGoalsNear";
   } else if (category === "Total Tournament Cards") {
-    const ct = tournamentFacts.cardsTotal;
+    const ct = getCardsTotal();
     if (!ct || typeof ct.total !== "number") return null;
     const cardGames = ct.games != null ? ct.games : games; // ESPN's ingested games (it lags fixtures)
     proj = Math.round(ct.total / cardGames * TOTAL_TOURNAMENT_GAMES);
@@ -3702,7 +3756,7 @@ function renderPredictions() {
   const { goals, games } = computeGoalTally();
   const goalsProj = games ? Math.round((goals / games) * TOTAL_TOURNAMENT_GAMES) : null;
 
-  const ct = tournamentFacts.cardsTotal; // { yellow, red, total, games, ... } or undefined
+  const ct = getCardsTotal(); // { yellow, red, total, games, ... } or undefined
   const cardsTotal = ct ? ct.total : null;
   // Cards come from ESPN, which lags behind the live fixtures -- so the card total covers ESPN's
   // games-ingested count, NOT the (fresher) fixture count. Use ct.games as the denominator; fall
@@ -3716,8 +3770,11 @@ function renderPredictions() {
     ? `<b>${goals}</b> goals in <b>${games}</b> games · projected <b class="pred-proj">~${goalsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games · ${ruleNote}`
     : "no games played yet";
 
+  const cardsManualNote = (ct && ct.manual)
+    ? ` · <span class="pred-manual">manual · as of ${ct.asOf}</span>`
+    : "";
   const cardsSub = ct
-    ? `<b>${ct.total}</b> cards (${ct.yellow}🟨 ${ct.red}🟥) in <b>${cardGames}</b> games · projected <b class="pred-proj">~${cardsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games · ${ruleNote}`
+    ? `<b>${ct.total}</b> cards (${ct.yellow}🟨 ${ct.red}🟥) in <b>${cardGames}</b> games · projected <b class="pred-proj">~${cardsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games · ${ruleNote}${cardsManualNote}`
     : "waiting for live card data…";
 
   // Brief "how the projection works" note shown at the bottom of each league.

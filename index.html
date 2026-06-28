@@ -126,6 +126,29 @@
   table.leaderboard td.num, table.leaderboard th.num { text-align: right; font-variant-numeric: tabular-nums; }
   table.leaderboard tr.me-row td { font-weight: 700; }
   table.leaderboard td.col-player-lb { position: relative; padding-left: 28px; }
+  /* Frozen leaderboard columns: #/Player pinned left, Total pinned right; the per-round columns
+     (and +/- PTS, Correct/Exact) scroll between them so the table never outgrows a phone in
+     landscape no matter how many knockout rounds stack up. Scoped to the full-column layout (NOT the
+     portrait-collapsed 5-col view, which already fits) via the complement of the portrait
+     breakpoint: `(min-width: 701px), (orientation: landscape)`. Scroll container is #leaderboard-card
+     (overflow-x: auto); box-sizing is border-box globally so the 46px rank width is exact. When the
+     table fits (desktop) there's no scroll, so the cells sit in normal flow and only the subtle edge
+     shadows show. */
+  @media (min-width: 701px), (orientation: landscape) {
+    table.leaderboard th.lb-freeze-rank, table.leaderboard td.lb-freeze-rank {
+      position: sticky; left: 0; z-index: 2; background: #fff; width: 46px; min-width: 46px;
+    }
+    table.leaderboard th.lb-freeze-player, table.leaderboard td.lb-freeze-player {
+      position: sticky; left: 46px; z-index: 2; background: #fff;
+      box-shadow: 6px 0 6px -5px rgba(0,0,0,0.18);
+    }
+    table.leaderboard th.lb-freeze-total, table.leaderboard td.lb-freeze-total {
+      position: sticky; right: 0; z-index: 2; background: #fff;
+      box-shadow: -6px 0 6px -5px rgba(0,0,0,0.18);
+    }
+    table.leaderboard th.lb-freeze-rank, table.leaderboard th.lb-freeze-player,
+    table.leaderboard th.lb-freeze-total { background: #fafbfc; }
+  }
   .rank-badge {
     display: inline-block;
     width: 22px;
@@ -815,6 +838,46 @@ DATA.matchweeks.push({
     { home: "Australia", away: "Egypt", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-03T18:00:00Z" },
     { home: "Argentina", away: "Cabo Verde", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-03T22:00:00Z" },
     { home: "Colombia", away: "Ghana", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-04T01:30:00Z" },
+  ],
+});
+
+// ── Round of 16 + Quarter-finals: hidden TBD placeholders, pre-built for kickoff times ───────
+// Same pattern as the Semi-finals & Final entry below: whole matchweek flagged `resultsOnly: true`
+// so it's INVISIBLE (no tab, no leaderboard column) until activated. Teams are "TBD" because the
+// matchups aren't known until R32/R16 are played. Kickoff times ARE known (fixed bracket slots,
+// official 2026 schedule, BST→UTC) so they're filled in now. These exist so: (a) live scores
+// auto-fill + surface in the Next Fixture card when their time comes, and (b) their goals/cards
+// count toward the Total Goals/Cards bonuses — which only resolve once ALL 104 fixtures
+// (72 group + 16 R32 + 8 R16 + 4 QF + 4 semis/final) are present AND resolved. Without these two
+// entries the count was 92, so those bonuses could never resolve. Order: after R32, before semis.
+//
+// TO ACTIVATE (once matchups are known and Gwil sends predictions): set the real team names, remove
+// `resultsOnly: true` at BOTH the matchweek and fixture level, and add each fixture's `predictions`
+// block (same shape as MW1–3). Removing the matchweek-level `resultsOnly` makes it a visible scored
+// tab + column. Name them so matchweekShortLabel maps cleanly ("Round of 16" → "L16",
+// "Quarter-finals" → "Q"). Leave any fixtures without predictions yet as fixture-level resultsOnly.
+DATA.matchweeks.push({
+  name: "Round of 16",
+  resultsOnly: true,
+  fixtures: [
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-04T17:00:00Z" },
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-04T21:00:00Z" },
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-05T20:00:00Z" },
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-06T00:00:00Z" },
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-06T19:00:00Z" },
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-07T00:00:00Z" },
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-07T16:00:00Z" },
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-07T20:00:00Z" },
+  ],
+});
+DATA.matchweeks.push({
+  name: "Quarter-finals",
+  resultsOnly: true,
+  fixtures: [
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-09T20:00:00Z" },
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-10T19:00:00Z" },
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-11T21:00:00Z" },
+    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-12T01:00:00Z" },
   ],
 });
 
@@ -1874,9 +1937,12 @@ function renderLeaderboard() {
   DATA.matchweeks.forEach((mw, i) => { if (!mw.resultsOnly) lastScoredMwIndex = i; });
 
   const head = document.getElementById("leaderboard-head");
-  head.innerHTML = "<th>#</th><th>Player</th>" +
+  // Column order: [#][Player] are frozen left, the per-round columns + Correct/Exact scroll, [Total]
+  // is frozen right (so it sits at the right edge it needs Total to be the last column). See the
+  // `.lb-freeze-*` sticky CSS, scoped to the full-column (non-portrait) layout.
+  head.innerHTML = `<th class="lb-freeze-rank">#</th><th class="lb-freeze-player">Player</th>` +
     DATA.matchweeks.map((mw, i) => mw.resultsOnly ? "" : `<th class="num${i < lastScoredMwIndex ? ' col-mw-past' : ''}" title="${mw.name}">${matchweekShortLabel(mw.name)}</th>`).join("") +
-    `<th class="num" title="Bonus points (net): matchweek wins + bracket bonus &amp; deductions">+/- PTS</th><th class="num">Total</th><th class="num col-correct">Correct</th><th class="num col-exact">Exact</th>`;
+    `<th class="num" title="Bonus points (net): matchweek wins + bracket bonus &amp; deductions">+/- PTS</th><th class="num col-correct">Correct</th><th class="num col-exact">Exact</th><th class="num lb-freeze-total">Total</th>`;
 
   const maxCorrect = Math.max(...rows.map(r => r.correct));
   const maxExact = Math.max(...rows.map(r => r.exactCount));
@@ -2074,13 +2140,13 @@ function renderLeaderboard() {
         ? `<span class="rank-move rank-move-down">↓${-rankDelta}</span>`
         : "";
     return `<tr>
-      <td><span class="rank-badge">${i + 1}</span></td>
-      <td class="col-player-lb">${rankMoveHtml}${playerLabel(r.player, "leaderboard-mug")}</td>
+      <td class="lb-freeze-rank"><span class="rank-badge">${i + 1}</span></td>
+      <td class="col-player-lb lb-freeze-player">${rankMoveHtml}${playerLabel(r.player, "leaderboard-mug")}</td>
       ${mwCells}
       <td class="num">${bonusCell}</td>
-      <td class="num ${totalClass}">${r.total > 0 ? "+" : ""}${r.total}</td>
       <td class="num col-correct">${correctCell}${exactSuffixHtml}</td>
       <td class="num col-exact">${exactCell}</td>
+      <td class="num lb-freeze-total ${totalClass}">${r.total > 0 ? "+" : ""}${r.total}</td>
     </tr>`;
   }).join("");
 

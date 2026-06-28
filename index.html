@@ -403,6 +403,7 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     z-index: 50;
     word-wrap: break-word;
+    white-space: pre-line; /* honour the \n line breaks in multi-item breakdown tooltips */
   }
   /* Correct/Exact always merged — Exact column hidden, suffix shown inline after Correct number. */
   .correct-exact-suffix { display: inline; margin-left: 5px; }
@@ -1265,13 +1266,19 @@ function computeBonusDeductionPoints(player) {
   const awards = tournamentFacts.awards || {};
   const redCardEvents = tournamentFacts.redCards || [];
 
+  // Append the player's actual pick to the label so the breakdown is transparent about which
+  // team/person earned (or missed) the points, not just "Champions correct".
   const teamPick = (id, label, category, truthName) => {
-    if (!truthName) { add(id, label, "pending", 0); return; }
-    add(id, label, teamsMatch(pickFor(category, player), truthName) ? "hit" : "miss", DEFAULT_BRACKET_BONUS);
+    const pick = pickFor(category, player);
+    const lbl = pick ? `${label}: ${pick}` : label;
+    if (!truthName) { add(id, lbl, "pending", 0); return; }
+    add(id, lbl, teamsMatch(pick, truthName) ? "hit" : "miss", DEFAULT_BRACKET_BONUS);
   };
   const personPick = (id, label, category, truthName) => {
-    if (!truthName) { add(id, label, "pending", 0); return; }
-    add(id, label, namesMatch(pickFor(category, player), truthName) ? "hit" : "miss", DEFAULT_BRACKET_BONUS);
+    const pick = pickFor(category, player);
+    const lbl = pick ? `${label}: ${pick}` : label;
+    if (!truthName) { add(id, lbl, "pending", 0); return; }
+    add(id, lbl, namesMatch(pick, truthName) ? "hit" : "miss", DEFAULT_BRACKET_BONUS);
   };
 
   teamPick("champions", "Champions correct", "Champions", finals.champion);
@@ -1287,7 +1294,7 @@ function computeBonusDeductionPoints(player) {
     add("darkHorse", "Dark Horse reaches semi-final", "pending", 0);
   } else {
     const pick = pickFor("Dark Horse", player);
-    add("darkHorse", "Dark Horse reaches semi-final",
+    add("darkHorse", pick ? `Dark Horse reaches semi-final: ${pick}` : "Dark Horse reaches semi-final",
       semis.some(team => teamsMatch(pick, team)) ? "hit" : "miss", BONUS_RULE_POINTS.darkHorseSemi);
   }
 
@@ -1334,24 +1341,27 @@ function computeBonusDeductionPoints(player) {
     add("mostGroupGoals", "Most Goals (Group Stage)", "pending", 0);
     add("fewestGroupGoals", "Fewest Goals (Group Stage)", "pending", 0);
   } else {
-    const mostPickCode = codeForTeamName(pickFor("Most Goals (Group Stage)", player));
-    const fewestPickCode = codeForTeamName(pickFor("Fewest Goals (Group Stage)", player));
-    add("mostGroupGoals", "Most Goals (Group Stage)",
+    const mostPick = pickFor("Most Goals (Group Stage)", player), fewestPick = pickFor("Fewest Goals (Group Stage)", player);
+    const mostPickCode = codeForTeamName(mostPick);
+    const fewestPickCode = codeForTeamName(fewestPick);
+    add("mostGroupGoals", mostPick ? `Most Goals (Group Stage): ${mostPick}` : "Most Goals (Group Stage)",
       mostPickCode && mostPickCode === goalsLeaders.most.code ? "hit" : "miss", DEFAULT_BRACKET_BONUS);
-    add("fewestGroupGoals", "Fewest Goals (Group Stage)",
+    add("fewestGroupGoals", fewestPick ? `Fewest Goals (Group Stage): ${fewestPick}` : "Fewest Goals (Group Stage)",
       fewestPickCode && fewestPickCode === goalsLeaders.fewest.code ? "hit" : "miss", DEFAULT_BRACKET_BONUS);
   }
 
   // --- Deductions ---
-  const championsCode = codeForTeamName(pickFor("Champions", player));
+  const championsPick = pickFor("Champions", player);
+  const championsCode = codeForTeamName(championsPick);
   const championsGroupStatus = championsCode ? teamGroupStatus(championsCode, groupStandings) : null;
-  add("championsGroupExit", "Champions pick eliminated in groups",
+  add("championsGroupExit", championsPick ? `Champions pick eliminated in groups: ${championsPick}` : "Champions pick eliminated in groups",
     !championsGroupStatus ? "pending" : (!championsGroupStatus.qualified ? "hit" : "miss"),
     BONUS_RULE_POINTS.championsGroupExit);
 
-  const worstCode = codeForTeamName(pickFor("Worst Team", player));
+  const worstPick = pickFor("Worst Team", player);
+  const worstCode = codeForTeamName(worstPick);
   const worstGroupStatus = worstCode ? teamGroupStatus(worstCode, groupStandings) : null;
-  add("worstTeamQualifies", "Worst Team pick qualifies from groups",
+  add("worstTeamQualifies", worstPick ? `Worst Team pick qualifies from groups: ${worstPick}` : "Worst Team pick qualifies from groups",
     !worstGroupStatus ? "pending" : (worstGroupStatus.qualified ? "hit" : "miss"),
     BONUS_RULE_POINTS.worstTeamQualifies);
 
@@ -1359,7 +1369,7 @@ function computeBonusDeductionPoints(player) {
     add("championsNonSeededLoss", "Champions pick lost to a non-seeded team", "pending", 0);
   } else {
     const upset = nonSeededUpsetStatus(championsCode);
-    add("championsNonSeededLoss", "Champions pick lost to a non-seeded team",
+    add("championsNonSeededLoss", `Champions pick lost to a non-seeded team: ${championsPick}`,
       upset.status, BONUS_RULE_POINTS.championsNonSeededLoss);
   }
 
@@ -1391,10 +1401,10 @@ function computeBonusDeductionPoints(player) {
   }
   redCardEvents.forEach((event, i) => {
     if (ballRedMatches.length === 1 && event.player === ballRedMatches[0]) {
-      add(`redCardBall${i}`, `Red card: Golden Ball pick (${event.player})`, "hit", BONUS_RULE_POINTS.goldenBallRed);
+      add(`redCardBall${i}`, `Red card — Golden Ball pick: ${event.player}`, "hit", BONUS_RULE_POINTS.goldenBallRed);
     }
     if (youngRedMatches.length === 1 && event.player === youngRedMatches[0]) {
-      add(`redCardYoung${i}`, `Red card: Young Player pick (${event.player})`, "hit", BONUS_RULE_POINTS.goldenBallRed);
+      add(`redCardYoung${i}`, `Red card — Young Player pick: ${event.player}`, "hit", BONUS_RULE_POINTS.goldenBallRed);
     }
   });
 
@@ -1415,11 +1425,11 @@ function computeBonusDeductionPoints(player) {
   const resolveCardAuto = (pickName, id, pickLabel) => {
     const matches = distinctMatchingNames(pickName, cardCountNames);
     if (matches.length > 1) {
-      add(id, `Yellow cards (auto-tracked): ${pickLabel} "${pickName}" matches multiple real players (${matches.join(", ")}) — ambiguous, not applied automatically`, "ambiguous", 0);
+      add(id, `Yellow cards: ${pickLabel} "${pickName}" matches multiple real players (${matches.join(", ")}) — ambiguous, not applied automatically`, "ambiguous", 0);
     } else if (matches.length === 1) {
       const cc = cardCounts.find(c => c.name === matches[0]);
       if (cc.yellow > 0) {
-        add(id, `Yellow cards (auto-tracked): ${pickLabel} (${cc.name}, x${cc.yellow})`, "hit", BONUS_RULE_POINTS.goldenBallYellow * cc.yellow);
+        add(id, `Yellow cards — ${pickLabel}: ${cc.name} ×${cc.yellow}`, "hit", BONUS_RULE_POINTS.goldenBallYellow * cc.yellow);
       }
     }
   };
@@ -1429,10 +1439,10 @@ function computeBonusDeductionPoints(player) {
   const yellowCardEvents = tournamentFacts.yellowCards || [];
   yellowCardEvents.forEach((event, i) => {
     if (namesMatch(ballPick, event.player)) {
-      add(`yellowCardBall${i}`, `Yellow card (manual): Golden Ball pick (${event.player})`, "hit", BONUS_RULE_POINTS.goldenBallYellow);
+      add(`yellowCardBall${i}`, `Yellow card — Golden Ball pick: ${event.player}`, "hit", BONUS_RULE_POINTS.goldenBallYellow);
     }
     if (namesMatch(youngPick, event.player)) {
-      add(`yellowCardYoung${i}`, `Yellow card (manual): Young Player pick (${event.player})`, "hit", BONUS_RULE_POINTS.goldenBallYellow);
+      add(`yellowCardYoung${i}`, `Yellow card — Young Player pick: ${event.player}`, "hit", BONUS_RULE_POINTS.goldenBallYellow);
     }
   });
 
@@ -1449,13 +1459,13 @@ function computeBonusDeductionPoints(player) {
   const confirmedPenalty = confirmedPenaltyMatches.length === 1
     ? CONFIRMED_MISSED_PENALTIES.find(c => c.player === confirmedPenaltyMatches[0]) : null;
   if (confirmedPenalty && confirmedPenalty.total > 0) {
-    add("missedPenaltyConfirmed", `Missed penalties (confirmed): Golden Boot pick (${confirmedPenalty.player}, x${confirmedPenalty.total})`,
+    add("missedPenaltyConfirmed", `Missed penalties — Golden Boot pick: ${confirmedPenalty.player} ×${confirmedPenalty.total}`,
       "hit", BONUS_RULE_POINTS.goldenBootMissedPenalty * confirmedPenalty.total);
   }
   const missedPenaltyEvents = tournamentFacts.missedPenalties || [];
   missedPenaltyEvents.forEach((event, i) => {
     if (namesMatch(bootPick, event.player)) {
-      add(`missedPenalty${i}`, `Missed penalty (manual): Golden Boot pick (${event.player})`, "hit", BONUS_RULE_POINTS.goldenBootMissedPenalty);
+      add(`missedPenalty${i}`, `Missed penalty — Golden Boot pick: ${event.player}`, "hit", BONUS_RULE_POINTS.goldenBootMissedPenalty);
     }
   });
 
@@ -2010,7 +2020,9 @@ function renderLeaderboard() {
     const bonusNet = grossPos + grossNeg;
     const netCls = bonusNet > 0 ? "total-pos" : (bonusNet < 0 ? "total-neg" : "");
     const netDisplay = bonusNet > 0 ? `+${bonusNet}` : `${bonusNet}`;
-    const bonusTitle = bonusItemsAll.map(it => `${it.label}: ${it.pts > 0 ? "+" : ""}${it.pts}`).join("; ").replace(/"/g, "&quot;");
+    // One line per scoring item (easier to scan than a single run-on sentence). Newlines are
+    // honoured by native title tooltips and by the tap-tooltip (#tap-tooltip { white-space: pre-line }).
+    const bonusTitle = bonusItemsAll.map(it => `${it.label}  ${it.pts > 0 ? "+" : ""}${it.pts}`).join("\n").replace(/"/g, "&quot;");
     const netSpan = bonusItemsAll.length
       ? `<span class="bonus-net bonus-info-box ${netCls}" title="${bonusTitle}">${netDisplay}</span>`
       : `<span class="bonus-net ${netCls}">${netDisplay}</span>`;
@@ -2719,8 +2731,8 @@ function bracketCellContent(category, player, totals) {
   const sum = items.reduce((s, it) => s + it.pts, 0);
   const title = items.map(it => {
     const v = it.status === "pending" ? "pending" : it.status === "ambiguous" ? "ambiguous, needs manual check" : it.status === "miss" ? "no" : `${it.pts > 0 ? "+" : ""}${it.pts}`;
-    return `${it.label}: ${v}`;
-  }).join("; ").replace(/"/g, "&quot;");
+    return `${it.label}  ${v}`;
+  }).join("\n").replace(/"/g, "&quot;");
 
   if (anyAmbiguous) {
     return { html: `${pick}<br><span class="bonus-info-box" title="${title}">❓ needs check</span>`, cellClass: "" };

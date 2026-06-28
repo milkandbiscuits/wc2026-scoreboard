@@ -448,6 +448,8 @@
     font-size: 12.5px;
   }
   .score-sep { margin: 0 2px; color: #888; }
+  /* Placeholder for a results-only fixture with no score yet — read-only, nothing to interact with. */
+  .score-locked { color: #c4c4c4; font-weight: 700; font-size: 14px; }
 
   .legend {
     display: flex;
@@ -2224,6 +2226,19 @@ function renderActualCell(mwIndex, fixIndex, hVal, aVal) {
   const live = liveData[key];
   const isManual = liveManualOverrideKeys.has(key);
 
+  // Results-only fixtures (e.g. R32 added before its predictions, or the TBD knockout placeholders)
+  // have nothing to score against yet, so the score is DISPLAY-ONLY: the auto-fetched live/final
+  // score shows read-only, and there are no editable boxes or ✕/↺ buttons to interact with. Becomes
+  // editable again automatically once the fixture is given predictions (resultsOnly removed).
+  if (fixture.resultsOnly) {
+    const ro = getActual(mwIndex, fixIndex, fixture);
+    if (!ro) return `<div class="actual-wrap"><span class="score-locked">–</span></div>`;
+    const inPlay = live && live.minute != null;
+    return `<div class="actual-wrap" data-actual-wrap="${key}">
+      <span class="live-score-badge">${inPlay ? '<span class="live-dot"></span>' : ''}${ro.h}–${ro.a}${inPlay ? `<span class="match-time">${live.minute}'</span>` : ''}</span>
+    </div>`;
+  }
+
   // Live feed active, not manually overridden, fixture not yet confirmed — show locked live score
   if (live && !isManual && !confirmed) {
     const timeLabel = live.minute != null ? live.minute + "'" : '';
@@ -2448,6 +2463,14 @@ function renderNextFixtureCard() {
 // other -- once there's something to say about the score, the "how to" hint isn't needed anymore.
 // Shared by both the full Next Fixture card and the compact portrait banner so they stay in sync.
 function fixtureGuidanceHtml(targets) {
+  // Results-only fixtures have a read-only score (no editable box), so don't prompt to "enter a
+  // score" or show the ✕/↺ live legend — just say the score tracks automatically.
+  if (targets && targets.length && targets.every(t => t.fixture.resultsOnly)) {
+    const awaitingPredictions = targets.some(t => !DATA.matchweeks[t.mwIndex].resultsOnly);
+    return `<p class="fixture-note">${awaitingPredictions
+      ? "Awaiting player predictions"
+      : "Live score updates automatically — counts toward the Goals &amp; Cards totals."}</p>`;
+  }
   const hasLive = targets && targets.some(t => liveData[fixtureKey(t.mwIndex, t.fixIndex)]);
   const text = buildWhatIfText(targets);
   const legend = hasLive

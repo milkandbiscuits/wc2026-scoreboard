@@ -90,6 +90,9 @@
     overflow: hidden;
   }
   #leaderboard-card { overflow-x: auto; }
+  /* Hide JS-rendered cards before renderAll() fires — they have a border/bg but no content yet,
+     causing a flash of blank boxes on load/refresh. Reverts automatically once JS adds children. */
+  .card:empty { display: none; }
   .card-title {
     padding: 14px 18px;
     font-weight: 600;

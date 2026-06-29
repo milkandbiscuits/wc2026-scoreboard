@@ -2451,15 +2451,17 @@ function isFixtureConfirmed(mwIndex, fixIndex, fixture) {
 //      already pulled the correct score, so after the match window we trust it and advance the card
 //      so the "LIVE" label and "what if this holds?" blurb clear automatically.
 const RESULTS_ONLY_MATCH_WINDOW_MS = 3 * 60 * 60 * 1000; // 3h — covers 90min + ET + pens + buffer
+const SCORED_MATCH_WINDOW_MS      = 2 * 60 * 60 * 1000; // 2h — covers 90min + stoppage for scored fixtures
 function isFixtureDone(mwIndex, fixIndex, fixture) {
   if (isFixtureConfirmed(mwIndex, fixIndex, fixture)) return true;
   if (!fixture.kickoff) return false;
-  const pastWindow = Date.now() >= new Date(fixture.kickoff).getTime() + RESULTS_ONLY_MATCH_WINDOW_MS;
-  if (!pastWindow) return false;
-  if (fixture.resultsOnly) return true;
-  // Scored fixture: auto-advance only when a live-sourced score is already present.
+  if (fixture.resultsOnly)
+    return Date.now() >= new Date(fixture.kickoff).getTime() + RESULTS_ONLY_MATCH_WINDOW_MS;
+  // Scored fixture: auto-advance once 2h past kickoff AND any score has been entered (live or
+  // manual) — Wikipedia confirmation can take 30-60+ mins, so don't keep flashing LIVE forever.
   const ov = overrides[fixtureKey(mwIndex, fixIndex)];
-  return !!(ov && ov.source === "live" && ov.h !== "" && ov.a !== "");
+  return !!(ov && ov.h !== "" && ov.a !== "" &&
+    Date.now() >= new Date(fixture.kickoff).getTime() + SCORED_MATCH_WINDOW_MS);
 }
 
 // True when the next unplayed fixtures belong to a results-only round (predictions not loaded yet) —

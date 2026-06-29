@@ -544,6 +544,12 @@
     line-height: 1; margin-left: 3px;
   }
   .clear-live-btn:hover { color: #e05555; border-color: #e05555; }
+  .confirm-result-btn {
+    border: 1px solid #4caf77; background: transparent; border-radius: 4px;
+    cursor: pointer; font-size: 10px; padding: 2px 6px; color: #4caf77;
+    line-height: 1; margin-left: 4px; font-weight: 600;
+  }
+  .confirm-result-btn:hover { background: #4caf77; color: #fff; }
   .reset-live-btn:hover { color: #22a855; border-color: #22a855; }
   .compact-fixture-banner { display: none; }
   .compact-fixture-row {
@@ -2310,18 +2316,28 @@ function renderActualCell(mwIndex, fixIndex, hVal, aVal) {
   // Live feed active, not manually overridden, fixture not yet confirmed — show locked live score
   if (live && !isManual && !confirmed) {
     const timeLabel = live.minute != null ? live.minute + "'" : '';
+    const mwLive = DATA.matchweeks[mwIndex];
+    const liveConfirmBtn = isKnockoutMatchweek(mwLive)
+      ? `<button class="confirm-result-btn" data-key="${key}" data-live-h="${live.h}" data-live-a="${live.a}" title="Confirm this as the final result">✓ Confirm</button>`
+      : '';
     return `<div class="actual-wrap" data-actual-wrap="${key}">
       <span class="live-score-badge"><span class="live-dot"></span>${live.h}–${live.a}${timeLabel ? `<span class="match-time">${timeLabel}</span>` : ''}</span>
+      ${liveConfirmBtn}
       <button class="clear-live-btn" data-key="${key}" title="Clear live score and enter your own">✕</button>
     </div>`;
   }
 
   // User cleared the live feed — show editable inputs with Reset button
   if (live && isManual && !confirmed) {
+    const mwManual = DATA.matchweeks[mwIndex];
+    const manualConfirmBtn = (hVal !== "" && aVal !== "" && isKnockoutMatchweek(mwManual))
+      ? `<button class="confirm-result-btn" data-key="${key}" title="Confirm this as the final result">✓ Confirm</button>`
+      : '';
     return `<div class="actual-wrap" data-actual-wrap="${key}">
       <input type="number" min="0" max="20" class="score-input" data-mw="${mwIndex}" data-fix="${fixIndex}" data-side="h" value="${hVal}">
       <span class="score-sep">-</span>
       <input type="number" min="0" max="20" class="score-input" data-mw="${mwIndex}" data-fix="${fixIndex}" data-side="a" value="${aVal}">
+      ${manualConfirmBtn}
       <button class="reset-live-btn" data-key="${key}" title="Reset to live score">↺</button>
     </div>`;
   }
@@ -2332,6 +2348,11 @@ function renderActualCell(mwIndex, fixIndex, hVal, aVal) {
   const showClear = hasValue && !confirmed;
   const clearBtn = showClear
     ? `<button class="clear-fixture-btn" data-key="${key}" title="Clear this score">×</button>`
+    : "";
+  const mw = DATA.matchweeks[mwIndex];
+  const isKnockout = isKnockoutMatchweek(mw);
+  const confirmBtn = (hasValue && !confirmed && isKnockout)
+    ? `<button class="confirm-result-btn" data-key="${key}" title="Confirm final result">✓ Confirm</button>`
     : "";
 
   if (locked) {
@@ -2344,7 +2365,7 @@ function renderActualCell(mwIndex, fixIndex, hVal, aVal) {
     <input type="number" min="0" max="20" class="score-input" data-mw="${mwIndex}" data-fix="${fixIndex}" data-side="h" value="${hVal}">
     <span class="score-sep">-</span>
     <input type="number" min="0" max="20" class="score-input" data-mw="${mwIndex}" data-fix="${fixIndex}" data-side="a" value="${aVal}">
-    ${clearBtn}
+    ${confirmBtn}${clearBtn}
   </div>`;
 }
 
@@ -2455,10 +2476,13 @@ const SCORED_MATCH_WINDOW_MS      = 3.5 * 60 * 60 * 1000; // 3.5h — covers 90m
 function isFixtureDone(mwIndex, fixIndex, fixture) {
   if (isFixtureConfirmed(mwIndex, fixIndex, fixture)) return true;
   if (!fixture.kickoff) return false;
+  // Knockout scored fixtures: never auto-close on time — ET + pens make duration unpredictable.
+  // Only confirmed (source:"fetch") results advance the card.
+  const mw = DATA.matchweeks[mwIndex];
+  if (!fixture.resultsOnly && isKnockoutMatchweek(mw)) return false;
   if (fixture.resultsOnly)
     return Date.now() >= new Date(fixture.kickoff).getTime() + RESULTS_ONLY_MATCH_WINDOW_MS;
-  // Scored fixture: auto-advance once 2h past kickoff AND any score has been entered (live or
-  // manual) — Wikipedia confirmation can take 30-60+ mins, so don't keep flashing LIVE forever.
+  // Group stage scored fixture: auto-advance once window elapsed AND a score exists.
   const ov = overrides[fixtureKey(mwIndex, fixIndex)];
   return !!(ov && ov.h !== "" && ov.a !== "" &&
     Date.now() >= new Date(fixture.kickoff).getTime() + SCORED_MATCH_WINDOW_MS);
@@ -3410,6 +3434,21 @@ function attachInputListeners() {
       const drift = clickedCard.getBoundingClientRect().top - anchorBefore;
       window.scrollBy(0, drift);
       restoreScrollState(s);
+    });
+  });
+  document.querySelectorAll(".confirm-result-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.key;
+      // Live-feed path stores score in data attrs; standard path uses overrides
+      const h = btn.dataset.liveH !== undefined ? btn.dataset.liveH : (overrides[key] || {}).h;
+      const a = btn.dataset.liveA !== undefined ? btn.dataset.liveA : (overrides[key] || {}).a;
+      if (h === "" || h === undefined || a === "" || a === undefined) return;
+      overrides[key] = { h: String(h), a: String(a), source: "fetch" };
+      liveManualOverrideKeys.delete(key);
+      unlockedKeys.delete(key);
+      saveOverrides(overrides);
+      flashSaveStatus();
+      renderAll();
     });
   });
   document.querySelectorAll(".clear-live-btn").forEach(btn => {

@@ -2408,6 +2408,25 @@ function isFixtureConfirmed(mwIndex, fixIndex, fixture) {
   return !!(ov && ov.source === "fetch" && ov.h !== "" && ov.a !== "");
 }
 
+// Knockout results-only fixtures have NO confirmation source yet (the Wikipedia fetch only reads the
+// group tables, not knockout results) and nothing to score — so without this they'd flash "LIVE"
+// forever and the Next Fixture card would never advance past a finished game. Treat a results-only
+// fixture as "done" once its match window (incl. extra time + penalties) has elapsed since kickoff,
+// so the card moves on. Scored fixtures are unaffected (still require a real confirmed result).
+const RESULTS_ONLY_MATCH_WINDOW_MS = 3 * 60 * 60 * 1000; // 3h
+function isFixtureDone(mwIndex, fixIndex, fixture) {
+  if (isFixtureConfirmed(mwIndex, fixIndex, fixture)) return true;
+  return !!(fixture.resultsOnly && fixture.kickoff &&
+    Date.now() >= new Date(fixture.kickoff).getTime() + RESULTS_ONLY_MATCH_WINDOW_MS);
+}
+
+// True when the next unplayed fixtures belong to a results-only round (predictions not loaded yet) —
+// used to stand down Movers & Shakers, which would otherwise recap an unrelated earlier matchweek.
+function currentRoundIsResultsOnly() {
+  const next = findNextFixtureGroup();
+  return next.length > 0 && next.every(t => t.fixture.resultsOnly);
+}
+
 // Returns ALL unconfirmed fixtures that share the earliest kickoff time -- handles the common
 // World Cup case where 2+ group games kick off simultaneously (especially in the last round of
 // each group, which always plays both games at the same time to prevent match-fixing). A single
@@ -2416,7 +2435,7 @@ function findNextFixtureGroup() {
   let earliest = null;
   DATA.matchweeks.forEach((mw, mwIndex) => {
     mw.fixtures.forEach((fixture, fixIndex) => {
-      if (isFixtureConfirmed(mwIndex, fixIndex, fixture)) return;
+      if (isFixtureDone(mwIndex, fixIndex, fixture)) return;
       if (!earliest || fixture.kickoff < earliest) earliest = fixture.kickoff;
     });
   });
@@ -2424,7 +2443,7 @@ function findNextFixtureGroup() {
   const group = [];
   DATA.matchweeks.forEach((mw, mwIndex) => {
     mw.fixtures.forEach((fixture, fixIndex) => {
-      if (fixture.kickoff === earliest && !isFixtureConfirmed(mwIndex, fixIndex, fixture))
+      if (fixture.kickoff === earliest && !isFixtureDone(mwIndex, fixIndex, fixture))
         group.push({ mwIndex, fixIndex, fixture });
     });
   });
@@ -2444,7 +2463,7 @@ function fixtureTitleLabel(targets) {
   const plural = targets.length > 1;
   const inPlay = targets.some(t =>
     Date.now() >= new Date(t.fixture.kickoff).getTime() &&
-    !isFixtureConfirmed(t.mwIndex, t.fixIndex, t.fixture)
+    !isFixtureDone(t.mwIndex, t.fixIndex, t.fixture)
   );
   if (inPlay) return `<span><span class="live-dot" style="margin-right:5px;"></span><span style="color:#e05555;">LIVE</span> ${plural ? "Fixtures" : "Fixture"}</span>`;
   return plural ? "Next Fixtures" : "Next Fixture";
@@ -2459,7 +2478,7 @@ function renderNextFixtureCard() {
   let targets = pinnedNextKickoff
     ? allFixturesChronological().filter(f =>
         f.fixture.kickoff === pinnedNextKickoff &&
-        !isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture))
+        !isFixtureDone(f.mwIndex, f.fixIndex, f.fixture))
     : [];
   if (targets.length === 0) {
     targets = findNextFixtureGroup();
@@ -2809,6 +2828,9 @@ function renderShakerCard() {
   const el = document.getElementById("shaker-card");
   // Stand down while the MW Wrap owns the top (matchweek just closed, next round not yet kicked off).
   if (activeWrapMwIndex() >= 0) { el.style.display = "none"; return; }
+  // Stand down while the current round is results-only (predictions not loaded) — there's nothing to
+  // comment on; M&S would only recap an unrelated earlier matchweek. Returns once predictions land.
+  if (currentRoundIsResultsOnly()) { el.style.display = "none"; return; }
   // Hide while matches are live — M&S shows last results, which is less relevant mid-match
   if (pinnedNextKickoff) {
     const now = Date.now();
@@ -3907,7 +3929,7 @@ async function pollLiveScores() {
   const now = Date.now();
   const hasLive = allFixturesChronological().some(f => {
     return new Date(f.fixture.kickoff).getTime() <= now &&
-           !isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture);
+           !isFixtureDone(f.mwIndex, f.fixIndex, f.fixture);
   });
   if (!hasLive) return;
 
@@ -4326,9 +4348,16 @@ function refreshFixtureTitleLabel() {
   if (!pinnedNextKickoff) return;
   const targets = allFixturesChronological().filter(f =>
     f.fixture.kickoff === pinnedNextKickoff &&
-    !isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture)
+    !isFixtureDone(f.mwIndex, f.fixIndex, f.fixture)
   );
-  if (!targets.length) return;
+  if (!targets.length) {
+    // The pinned game(s) are done (e.g. a results-only knockout tie has run its match window) — no
+    // confirmed result will arrive to advance it, so advance the card here. Safe to re-render the
+    // next-fixture card from the timer: results-only fixtures have no editable inputs to steal focus.
+    renderNextFixtureCard();
+    renderShakerCard();
+    return;
+  }
   const label = fixtureTitleLabel(targets);
   document.querySelectorAll("#next-fixture-card .card-title, #compact-fixture-banner .card-title").forEach(el => {
     const meta = el.querySelector('.meta');

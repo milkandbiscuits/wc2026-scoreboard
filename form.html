@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WC 2026 Predictions</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy: #1a2b49;
+  --navy-light: #243659;
+  --accent: #3b82f6;
+  --accent-dark: #2563eb;
+  --green: #22c55e;
+  --red: #ef4444;
+  --amber: #f59e0b;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-light: #94a3b8;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --surface: #ffffff;
+  --surface-alt: #f8fafc;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #f1f5f9;
+    --text-muted: #94a3b8;
+    --text-light: #64748b;
+    --border: #1e293b;
+    --border-strong: #334155;
+    --surface: #0f172a;
+    --surface-alt: #1e293b;
+  }
+}
+html { -webkit-text-size-adjust: 100%; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--surface-alt); color: var(--text); min-height: 100vh; }
+
+header { background: var(--navy); color: #fff; padding: 16px 20px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 10; }
+header h1 { font-size: 17px; font-weight: 600; }
+header p { font-size: 12px; color: #c7d0e0; margin-top: 1px; }
+
+.container { max-width: 560px; margin: 0 auto; padding: 16px 16px 80px; }
+
+.section-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+
+.field-label { font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; display: block; }
+select, input[type=number] {
+  width: 100%; padding: 10px 12px; font-size: 15px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  background: var(--surface); color: var(--text);
+  -webkit-appearance: none; appearance: none;
+}
+select:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+
+.instructions { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.instructions strong { color: var(--text); font-weight: 500; }
+
+.drag-hint { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+.drag-hint svg { flex-shrink: 0; }
+
+.confidence-ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-light); margin-bottom: 8px; padding: 0 2px; }
+
+.fixture-list { display: flex; flex-direction: column; gap: 6px; }
+
+.fixture-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.fixture-card:active { cursor: grabbing; }
+.fixture-card.dragging { opacity: 0.35; }
+.fixture-card.drag-over { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+
+.card-top { display: flex; align-items: center; gap: 10px; }
+.grip { display: flex; flex-direction: column; gap: 2.5px; flex-shrink: 0; padding: 2px 0; cursor: grab; }
+.grip span { display: block; width: 16px; height: 2px; background: var(--border-strong); border-radius: 2px; }
+
+.stake-badge {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600; flex-shrink: 0;
+  transition: background 0.2s, color 0.2s;
+}
+.stake-high { background: var(--accent); color: #fff; }
+.stake-mid { background: #dbeafe; color: #1d4ed8; }
+.stake-low { background: var(--border); color: var(--text-muted); }
+
+@media (prefers-color-scheme: dark) {
+  .stake-mid { background: #1e3a5f; color: #93c5fd; }
+  .stake-low { background: var(--border); color: var(--text-light); }
+}
+
+.fixture-name { flex: 1; min-width: 0; }
+.fixture-name .teams { font-size: 14px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fixture-name .vs { color: var(--text-light); font-weight: 400; }
+
+.card-inputs { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+
+.hda-group { display: flex; gap: 4px; }
+.hda-group label { position: relative; }
+.hda-group input[type=radio] { position: absolute; opacity: 0; width: 0; height: 0; }
+.hda-btn {
+  display: block; padding: 5px 11px;
+  font-size: 12px; font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  cursor: pointer; color: var(--text-muted);
+  background: var(--surface-alt);
+  transition: all 0.1s;
+}
+.hda-group input[type=radio]:checked + .hda-btn { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.score-group { display: flex; align-items: center; gap: 5px; margin-left: auto; }
+.score-group input[type=number] {
+  width: 42px; padding: 5px 6px; font-size: 14px; font-weight: 500;
+  text-align: center; border-radius: 6px;
+}
+.score-sep { font-size: 14px; font-weight: 600; color: var(--text-muted); }
+
+.progress-wrap { margin-bottom: 4px; }
+.progress-bar { height: 4px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.3s; }
+.progress-label { font-size: 12px; color: var(--text-muted); margin-top: 5px; }
+
+.submit-btn {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  padding: 14px 20px 28px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.submit-btn button {
+  width: 100%; max-width: 560px; margin: 0 auto; display: block;
+  padding: 14px; font-size: 16px; font-weight: 600;
+  background: var(--accent); color: #fff;
+  border: none; border-radius: 12px; cursor: pointer;
+  transition: background 0.15s;
+}
+.submit-btn button:hover { background: var(--accent-dark); }
+.submit-btn button:disabled { background: var(--border-strong); color: var(--text-light); cursor: default; }
+
+.success-screen { display: none; text-align: center; padding: 60px 20px; }
+.success-screen .tick { font-size: 56px; margin-bottom: 16px; }
+.success-screen h2 { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
+.success-screen p { font-size: 15px; color: var(--text-muted); line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>WC 2026 · Round of 32</h1>
+    <p>Predictions — deadline: kickoff of first game</p>
+  </div>
+</header>
+
+<div class="container" id="form-container">
+
+  <div class="section-card">
+    <label class="field-label" for="player-select">Your name</label>
+    <select id="player-select">
+      <option value="">Select your name...</option>
+      <option>Fred + Teilo</option>
+      <option>Rhodri B</option>
+      <option>Rhodri W</option>
+      <option>Llion</option>
+      <option>Nick B</option>
+      <option>Ant</option>
+      <option>Lane</option>
+      <option>Gwil</option>
+      <option>Matt</option>
+      <option>Liam B</option>
+      <option>Gaz T</option>
+      <option>Guto</option>
+      <option>Gaz E</option>
+      <option>Trystan H</option>
+      <option>Nick S</option>
+      <option>Dan D</option>
+    </select>
+  </div>
+
+  <div class="section-card">
+    <p class="instructions">
+      <strong>Drag fixtures</strong> to rank your confidence — most confident at the top gets stake 16, least confident at the bottom gets stake 1.
+      Then pick a result (H/D/A) and scoreline for each game.
+    </p>
+  </div>
+
+  <div class="section-card progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <div class="progress-label" id="progress-label">0 of 16 fixtures filled in</div>
+  </div>
+
+  <div class="drag-hint">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/><line x1="12" y1="5" x2="12" y2="19" transform="rotate(180 12 12)"/></svg>
+    Drag to reorder · most confident at top
+  </div>
+  <div class="confidence-ends"><span>▲ Most confident (stake 16)</span><span>Least confident (stake 1) ▼</span></div>
+
+  <div class="fixture-list" id="fixture-list"></div>
+
+</div>
+
+<div class="success-screen" id="success-screen">
+  <div class="tick">✅</div>
+  <h2>Predictions submitted!</h2>
+  <p>Thanks — Gwil will load everyone's picks into the scoreboard once all 17 players are in.</p>
+</div>
+
+<div class="submit-btn">
+  <button id="submit-btn" disabled onclick="handleSubmit()">Fill in all fixtures to submit</button>
+</div>
+
+<script>
+const FIXTURES = [
+  "South Africa v Canada","Brazil v Japan","Germany v Paraguay","Netherlands v Morocco",
+  "Côte d'Ivoire v Norway","France v Sweden","Mexico v Ecuador","England v Congo DR",
+  "Belgium v Senegal","United States v Bosnia","Spain v Austria","Portugal v Croatia",
+  "Switzerland v Algeria","Australia v Egypt","Argentina v Cabo Verde","Colombia v Ghana"
+];
+
+let order = FIXTURES.map((_, i) => i);
+let dragSrcIdx = null;
+let touchDragIdx = null;
+let touchClone = null;
+
+function stakeClass(stake) {
+  if (stake >= 12) return 'stake-high';
+  if (stake >= 6) return 'stake-mid';
+  return 'stake-low';
+}
+
+function render() {
+  const list = document.getElementById('fixture-list');
+  const n = order.length;
+  list.innerHTML = '';
+  order.forEach((fi, pos) => {
+    const stake = n - pos;
+    const [home, away] = FIXTURES[fi].split(' v ');
+    const card = document.createElement('div');
+    card.className = 'fixture-card';
+    card.draggable = true;
+    card.dataset.idx = pos;
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="grip"><span></span><span></span><span></span></div>
+        <div class="stake-badge ${stakeClass(stake)}">${stake}</div>
+        <div class="fixture-name">
+          <div class="teams">${home} <span class="vs">v</span> ${away}</div>
+        </div>
+      </div>
+      <div class="card-inputs">
+        <div class="hda-group">
+          <label><input type="radio" name="hda${fi}" value="H"><span class="hda-btn">H</span></label>
+          <label><input type="radio" name="hda${fi}" value="D"><span class="hda-btn">D</span></label>
+          <label><input type="radio" name="hda${fi}" value="A"><span class="hda-btn">A</span></label>
+        </div>
+        <div class="score-group">
+          <input type="number" id="sh${fi}" min="0" max="20" placeholder="0">
+          <span class="score-sep">–</span>
+          <input type="number" id="sa${fi}" min="0" max="20" placeholder="0">
+        </div>
+      </div>`;
+
+    card.addEventListener('dragstart', e => {
+      dragSrcIdx = pos;
+      setTimeout(() => card.classList.add('dragging'), 0);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drag-over'); });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      if (dragSrcIdx === null || dragSrcIdx === pos) return;
+      const moved = order.splice(dragSrcIdx, 1)[0];
+      order.splice(pos, 0, moved);
+      dragSrcIdx = null;
+      render();
+    });
+
+    card.addEventListener('touchstart', onTouchStart, { passive: true });
+    card.addEventListener('touchmove', onTouchMove, { passive: false });
+    card.addEventListener('touchend', onTouchEnd);
+
+    list.appendChild(card);
+  });
+
+  document.getElementById('fixture-list').addEventListener('change', updateProgress);
+  document.getElementById('fixture-list').addEventListener('input', updateProgress);
+  updateProgress();
+}
+
+function onTouchStart(e) {
+  const card = e.currentTarget;
+  touchDragIdx = parseInt(card.dataset.idx);
+  const rect = card.getBoundingClientRect();
+  touchClone = card.cloneNode(true);
+  touchClone.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;opacity:0.85;pointer-events:none;z-index:999;border:2px solid #3b82f6;border-radius:12px;background:var(--surface);`;
+  document.body.appendChild(touchClone);
+  card.style.opacity = '0.3';
+}
+
+function onTouchMove(e) {
+  e.preventDefault();
+  if (!touchClone) return;
+  const t = e.touches[0];
+  touchClone.style.top = (t.clientY - 30) + 'px';
+  const cards = [...document.querySelectorAll('.fixture-card')];
+  cards.forEach(c => c.classList.remove('drag-over'));
+  const target = cards.find(c => {
+    const r = c.getBoundingClientRect();
+    return t.clientY >= r.top && t.clientY <= r.bottom;
+  });
+  if (target) target.classList.add('drag-over');
+}
+
+function onTouchEnd(e) {
+  if (!touchClone) return;
+  const t = e.changedTouches[0];
+  const cards = [...document.querySelectorAll('.fixture-card')];
+  cards.forEach(c => c.classList.remove('drag-over'));
+  const target = cards.find(c => {
+    const r = c.getBoundingClientRect();
+    return t.clientY >= r.top && t.clientY <= r.bottom;
+  });
+  const targetIdx = target ? parseInt(target.dataset.idx) : null;
+  touchClone.remove(); touchClone = null;
+  const srcCard = cards[touchDragIdx];
+  if (srcCard) srcCard.style.opacity = '';
+  if (targetIdx !== null && targetIdx !== touchDragIdx) {
+    const moved = order.splice(touchDragIdx, 1)[0];
+    order.splice(targetIdx, 0, moved);
+    render();
+  }
+  touchDragIdx = null;
+}
+
+function updateProgress() {
+  let filled = 0;
+  FIXTURES.forEach((_, fi) => {
+    const hda = document.querySelector(`input[name="hda${fi}"]:checked`);
+    const h = document.getElementById(`sh${fi}`)?.value;
+    const a = document.getElementById(`sa${fi}`)?.value;
+    if (hda && h !== '' && a !== '') filled++;
+  });
+  const pct = Math.round(filled / FIXTURES.length * 100);
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = `${filled} of ${FIXTURES.length} fixtures filled in`;
+  const btn = document.getElementById('submit-btn');
+  const player = document.getElementById('player-select').value;
+  const ready = filled === FIXTURES.length && player;
+  btn.disabled = !ready;
+  btn.textContent = ready ? 'Submit predictions' : (filled < FIXTURES.length ? `Fill in all fixtures to submit (${FIXTURES.length - filled} remaining)` : 'Select your name to submit');
+}
+
+document.getElementById('player-select').addEventListener('change', updateProgress);
+
+function handleSubmit() {
+  const player = document.getElementById('player-select').value;
+  if (!player) return;
+  const preds = {};
+  order.forEach((fi, pos) => {
+    const stake = FIXTURES.length - pos;
+    const hda = document.querySelector(`input[name="hda${fi}"]:checked`)?.value;
+    const h = parseInt(document.getElementById(`sh${fi}`).value);
+    const a = parseInt(document.getElementById(`sa${fi}`).value);
+    preds[FIXTURES[fi]] = { h, a, stake, direction: hda };
+  });
+  console.log('Predictions for', player, JSON.stringify(preds, null, 2));
+  document.getElementById('form-container').style.display = 'none';
+  document.querySelector('.submit-btn').style.display = 'none';
+  document.getElementById('success-screen').style.display = 'block';
+}
+
+render();
+</script>
+</body>
+</html>

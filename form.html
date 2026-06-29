@@ -114,6 +114,18 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 .dup-warning { font-size: 12px; color: var(--red); margin-top: 8px; padding: 6px 10px; background: var(--bg-red); border-radius: 6px; display: none; }
 .dup-warning.visible { display: block; }
 
+.excel-row { display: flex; gap: 8px; margin-top: 12px; }
+.excel-btn {
+  flex: 1; padding: 9px 10px; font-size: 13px; font-weight: 500;
+  border-radius: 8px; cursor: pointer; text-align: center;
+  border: 1px solid var(--border-strong); background: var(--surface-alt); color: var(--text);
+  transition: background 0.15s;
+}
+.excel-btn:hover { background: var(--border); }
+.excel-btn.import { background: var(--navy); color: #fff; border-color: var(--navy); }
+.excel-btn.import:hover { background: #243659; }
+.import-note { font-size: 11px; color: var(--text-light); margin-top: 6px; text-align: center; }
+
 .submit-bar {
   position: fixed; bottom: 0; left: 0; right: 0;
   padding: 12px 16px 28px; background: var(--surface);
@@ -159,6 +171,14 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 
   <div class="card">
     <p class="instructions">For each game, enter a <strong>score prediction</strong> and a <strong>confidence stake</strong> (1–16). Each number must be used exactly once — 16 = most confident, 1 = least.</p>
+    <div class="excel-row">
+      <button class="excel-btn" onclick="downloadTemplate()">⬇ Download template</button>
+      <label class="excel-btn import" style="display:flex;align-items:center;justify-content:center;gap:6px;">
+        ⬆ Import Excel
+        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(this)">
+      </label>
+    </div>
+    <p class="import-note">Fill in the template, then import it to populate the form</p>
     <div class="used-stakes" id="used-stakes"></div>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
     <div class="progress-label" id="progress-label">0 of 16 fixtures filled in</div>
@@ -281,6 +301,56 @@ function handleSubmit() {
 
 buildList();
 validate();
+
+function downloadTemplate() {
+  if (typeof XLSX === 'undefined') { alert('Still loading — try again in a moment'); return; }
+  const rows = [['Home', 'Away', 'Home score', 'Away score', 'Confidence (1–16)']];
+  FIXTURES.forEach(([h, a]) => rows.push([h, a, '', '', '']));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:18},{wch:18},{wch:12},{wch:12},{wch:18}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Predictions');
+  XLSX.writeFile(wb, 'WC2026-predictions-template.xlsx');
+}
+
+function importExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (typeof XLSX === 'undefined') { alert('Still loading — try again in a moment'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      let imported = 0, errors = [];
+      rows.forEach((row, ri) => {
+        if (ri === 0) return;
+        const [rHome, rAway, rH, rA, rStake] = row;
+        if (!rHome || !rAway) return;
+        const fi = FIXTURES.findIndex(([h, a]) =>
+          h.toLowerCase() === String(rHome).trim().toLowerCase() &&
+          a.toLowerCase() === String(rAway).trim().toLowerCase()
+        );
+        if (fi === -1) { errors.push(`Unrecognised fixture: ${rHome} v ${rAway}`); return; }
+        if (rH !== '' && rH !== undefined) document.getElementById(`sh${fi}`).value = parseInt(rH);
+        if (rA !== '' && rA !== undefined) document.getElementById(`sa${fi}`).value = parseInt(rA);
+        if (rStake !== '' && rStake !== undefined) {
+          const sel = document.getElementById(`stake${fi}`);
+          sel.value = parseInt(rStake);
+        }
+        imported++;
+      });
+      validate();
+      if (errors.length) alert(`Imported ${imported} fixtures.\n\nWarnings:\n${errors.join('\n')}`);
+      input.value = '';
+    } catch(err) {
+      alert('Could not read the file — make sure it\'s a valid Excel file (.xlsx)');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </body>
 </html>

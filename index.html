@@ -2625,27 +2625,27 @@ function buildLastFixtureText() {
 
   let lastF = null;
   allChron.forEach(f => {
-    if (isFixtureDone(f.mwIndex, f.fixIndex, f.fixture)) lastF = f;
+    if (isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture)) lastF = f;
   });
   if (!lastF) return null;
 
-  // Stable until a new fixture is done — don't re-randomise pick() on every keypress
+  // Stable until a new fixture is confirmed — don't re-randomise pick() on every keypress
   if (_shakerCache && _shakerCache.key === lastF.key) return _shakerCache.result;
 
   const actual = getActual(lastF.mwIndex, lastF.fixIndex, lastF.fixture);
   if (!actual) return null;
 
-  // All done fixtures that share the same kickoff as lastF (concurrent batch)
+  // All confirmed fixtures that share the same kickoff as lastF (concurrent batch)
   const lastBatch = [];
   allChron.forEach(f => {
-    if (isFixtureDone(f.mwIndex, f.fixIndex, f.fixture) && f.fixture.kickoff === lastF.fixture.kickoff) {
+    if (isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture) && f.fixture.kickoff === lastF.fixture.kickoff) {
       lastBatch.push(f);
     }
   });
 
   const confirmedKeys = new Set();
   allChron.forEach(f => {
-    if (isFixtureDone(f.mwIndex, f.fixIndex, f.fixture)) confirmedKeys.add(f.key);
+    if (isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture)) confirmedKeys.add(f.key);
   });
   const beforeKeys = new Set(confirmedKeys);
   beforeKeys.delete(lastF.key);
@@ -4413,7 +4413,30 @@ fetchLiveScores(); // auto-check Wikipedia for the latest results as soon as the
 // which would steal focus from someone mid-typing a score, exactly what onScoreInput's "don't
 // re-render on every keystroke" guard exists to avoid elsewhere. This has to stay just as careful
 // even though it's timer-driven rather than input-driven.
+// Once a scored fixture's match window has elapsed and a score is present, lock it in by promoting
+// the override to source:"fetch". This makes isFixtureConfirmed() return true everywhere downstream
+// (M&S, scoring, next-fixture advancement) without needing separate isFixtureDone() workarounds.
+// Wikipedia will still overwrite with the authoritative result if/when it confirms later.
+function promoteExpiredScores() {
+  let promoted = false;
+  DATA.matchweeks.forEach((mw, mwIndex) => {
+    mw.fixtures.forEach((fixture, fixIndex) => {
+      if (fixture.resultsOnly) return;
+      if (isFixtureConfirmed(mwIndex, fixIndex, fixture)) return;
+      const key = fixtureKey(mwIndex, fixIndex);
+      const ov = overrides[key];
+      if (!ov || ov.h === "" || ov.a === "") return;
+      if (!fixture.kickoff) return;
+      if (Date.now() < new Date(fixture.kickoff).getTime() + SCORED_MATCH_WINDOW_MS) return;
+      overrides[key] = { ...ov, source: "fetch" };
+      promoted = true;
+    });
+  });
+  if (promoted) saveOverrides();
+}
+
 function refreshFixtureTitleLabel() {
+  promoteExpiredScores();
   if (!pinnedNextKickoff) return;
   const targets = allFixturesChronological().filter(f =>
     f.fixture.kickoff === pinnedNextKickoff &&

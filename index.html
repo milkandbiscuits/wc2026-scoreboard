@@ -3423,6 +3423,7 @@ const TEAM_CODE = {
   "Uzbekistan": "UZB",
 };
 const WIKI_GROUPS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+const KNOCKOUT_TITLE = "2026 FIFA World Cup knockout stage";
 
 // --- Name matching for free-text bracket picks ---
 // Picks were typed by hand and are full of accents/nicknames/typos ("Mbappé" vs "Mbappe" vs
@@ -3529,6 +3530,21 @@ function parseGroupWikitext(wikitext) {
     }
     if (!m) continue;
     results.push({ code1: t1[1], code2: t2[1], h: Number(m[1]), a: Number(m[2]) });
+  }
+  return results;
+}
+
+// Knockout results live on the "...knockout stage" article in a bracket template (NOT football-box
+// blocks — those are only the upcoming "Winner Match NN" placeholders). Each played tie is a row like
+// `{{#invoke:flag|fb|RSA}}|0|{{#invoke:flag|fb|CAN}}|1`; unplayed ties have empty score cells, so the
+// `|digit|` requirement naturally skips them. Returns the same {code1,code2,h,a} shape as the group
+// parser, so fetchLiveScores confirms knockout fixtures by team code exactly like group games.
+function parseKnockoutBracket(wikitext) {
+  const results = [];
+  const re = /\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}\s*\|\s*(\d+)\s*\|\s*\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}\s*\|\s*(\d+)/g;
+  let m;
+  while ((m = re.exec(wikitext)) !== null) {
+    results.push({ code1: m[1], code2: m[3], h: Number(m[2]), a: Number(m[4]) });
   }
   return results;
 }
@@ -3719,10 +3735,18 @@ async function fetchAllGroups() {
 
   let byTitle;
   try {
-    byTitle = await fetchWithOneRetry(() => fetchWikitextByTitle(groupTitles));
+    // Fetch the knockout-stage article in the same batched request (one extra title, well within the
+    // API limit) so knockout results auto-fill alongside the groups.
+    byTitle = await fetchWithOneRetry(() => fetchWikitextByTitle([...groupTitles, KNOCKOUT_TITLE]));
   } catch (e) {
     return { allResults, resultsByGroup, failedGroups: WIKI_GROUPS.slice() };
   }
+
+  // Knockout results (R32 onward) — parsed from the bracket template, merged into allResults so the
+  // existing confirm-by-team-code loop in fetchLiveScores fills those fixtures just like group games.
+  // Not fatal if the article didn't load; the groups below still process normally.
+  const koWt = byTitle[KNOCKOUT_TITLE];
+  if (koWt) allResults.push(...parseKnockoutBracket(koWt));
 
   // A particularly notable match (a dramatic finish, a controversy) sometimes gets spun off into its
   // own dedicated Wikipedia article, with the group page transcluding the score box from there via

@@ -2451,7 +2451,7 @@ function isFixtureConfirmed(mwIndex, fixIndex, fixture) {
 //      already pulled the correct score, so after the match window we trust it and advance the card
 //      so the "LIVE" label and "what if this holds?" blurb clear automatically.
 const RESULTS_ONLY_MATCH_WINDOW_MS = 3 * 60 * 60 * 1000; // 3h — covers 90min + ET + pens + buffer
-const SCORED_MATCH_WINDOW_MS      = 2 * 60 * 60 * 1000; // 2h — covers 90min + stoppage for scored fixtures
+const SCORED_MATCH_WINDOW_MS      = 3.5 * 60 * 60 * 1000; // 3.5h — covers 90min + ET + pens + buffer
 function isFixtureDone(mwIndex, fixIndex, fixture) {
   if (isFixtureConfirmed(mwIndex, fixIndex, fixture)) return true;
   if (!fixture.kickoff) return false;

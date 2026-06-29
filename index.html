@@ -2439,16 +2439,24 @@ function isFixtureConfirmed(mwIndex, fixIndex, fixture) {
   return !!(ov && ov.source === "fetch" && ov.h !== "" && ov.a !== "");
 }
 
-// Knockout results-only fixtures have NO confirmation source yet (the Wikipedia fetch only reads the
-// group tables, not knockout results) and nothing to score — so without this they'd flash "LIVE"
-// forever and the Next Fixture card would never advance past a finished game. Treat a results-only
-// fixture as "done" once its match window (incl. extra time + penalties) has elapsed since kickoff,
-// so the card moves on. Scored fixtures are unaffected (still require a real confirmed result).
-const RESULTS_ONLY_MATCH_WINDOW_MS = 3 * 60 * 60 * 1000; // 3h
+// Treat a fixture as "done" (card advances, LIVE label clears) once:
+//   a) it's confirmed via Wikipedia (source:"fetch"), OR
+//   b) results-only AND the 3h match window has elapsed (no Wikipedia confirmation ever arrives for
+//      these — the bracket parser only reads completed rounds, so we fall back to wall-clock time), OR
+//   c) scored fixture AND the 3h window has elapsed AND a live score exists (source:"live") —
+//      Wikipedia's knockout-bracket confirmation can take 30-60+ mins post-game; the live Worker has
+//      already pulled the correct score, so after the match window we trust it and advance the card
+//      so the "LIVE" label and "what if this holds?" blurb clear automatically.
+const RESULTS_ONLY_MATCH_WINDOW_MS = 3 * 60 * 60 * 1000; // 3h — covers 90min + ET + pens + buffer
 function isFixtureDone(mwIndex, fixIndex, fixture) {
   if (isFixtureConfirmed(mwIndex, fixIndex, fixture)) return true;
-  return !!(fixture.resultsOnly && fixture.kickoff &&
-    Date.now() >= new Date(fixture.kickoff).getTime() + RESULTS_ONLY_MATCH_WINDOW_MS);
+  if (!fixture.kickoff) return false;
+  const pastWindow = Date.now() >= new Date(fixture.kickoff).getTime() + RESULTS_ONLY_MATCH_WINDOW_MS;
+  if (!pastWindow) return false;
+  if (fixture.resultsOnly) return true;
+  // Scored fixture: auto-advance only when a live-sourced score is already present.
+  const ov = overrides[fixtureKey(mwIndex, fixIndex)];
+  return !!(ov && ov.source === "live" && ov.h !== "" && ov.a !== "");
 }
 
 // True when the next unplayed fixtures belong to a results-only round (predictions not loaded yet) —

@@ -2625,27 +2625,27 @@ function buildLastFixtureText() {
 
   let lastF = null;
   allChron.forEach(f => {
-    if (isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture)) lastF = f;
+    if (isFixtureDone(f.mwIndex, f.fixIndex, f.fixture)) lastF = f;
   });
   if (!lastF) return null;
 
-  // Stable until a new fixture is confirmed — don't re-randomise pick() on every keypress
+  // Stable until a new fixture is done — don't re-randomise pick() on every keypress
   if (_shakerCache && _shakerCache.key === lastF.key) return _shakerCache.result;
 
   const actual = getActual(lastF.mwIndex, lastF.fixIndex, lastF.fixture);
   if (!actual) return null;
 
-  // All confirmed fixtures that share the same kickoff as lastF (concurrent batch)
+  // All done fixtures that share the same kickoff as lastF (concurrent batch)
   const lastBatch = [];
   allChron.forEach(f => {
-    if (isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture) && f.fixture.kickoff === lastF.fixture.kickoff) {
+    if (isFixtureDone(f.mwIndex, f.fixIndex, f.fixture) && f.fixture.kickoff === lastF.fixture.kickoff) {
       lastBatch.push(f);
     }
   });
 
   const confirmedKeys = new Set();
   allChron.forEach(f => {
-    if (isFixtureConfirmed(f.mwIndex, f.fixIndex, f.fixture)) confirmedKeys.add(f.key);
+    if (isFixtureDone(f.mwIndex, f.fixIndex, f.fixture)) confirmedKeys.add(f.key);
   });
   const beforeKeys = new Set(confirmedKeys);
   beforeKeys.delete(lastF.key);

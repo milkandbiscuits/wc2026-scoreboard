@@ -4432,7 +4432,7 @@ function promoteExpiredScores() {
       promoted = true;
     });
   });
-  if (promoted) saveOverrides();
+  if (promoted) saveOverrides(overrides);
 }
 
 function refreshFixtureTitleLabel() {

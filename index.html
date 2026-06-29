@@ -1279,6 +1279,10 @@ function isSeededCode(code) {
   return SEEDED_TEAM_NAMES.some(name => TEAM_CODE[name] === code);
 }
 
+// The tournament's confirmed "worst team" (Gwil's call — there's no single automatic metric for it).
+// Set to the team name to award the +5 "Worst Team correct" bonus to whoever picked it; null = pending.
+const CONFIRMED_WORST_TEAM = "Iraq";
+
 // Missed-penalty deduction has no live-fetchable source (see HANDOVER.md -- besoccer.com blocks
 // automated requests entirely, FotMob/Marca don't track this stat at all). Instead: the user drops
 // screenshots of besoccer's "Most penalties missed" ranking into
@@ -1349,7 +1353,7 @@ const BONUS_RULE_POINTS = {
   totalCardsExact: 20, totalCardsNear: 5,
   championsGroupExit: -10, goldenBootZeroGoals: -10, goldenBootOneGoal: -5, worstTeamQualifies: -10,
   championsNonSeededLoss: -5, goldenBallRed: -10, goldenBallYellow: -5, goldenBootMissedPenalty: -5,
-  trumpHighFive: -100,
+  trumpHighFive: -100, worstTeamCorrect: 5,
 };
 
 // The full fixture count of the prediction game's scope (group stage → final = 104 for WC 2026).
@@ -1500,6 +1504,11 @@ function computeBonusDeductionPoints(player) {
   add("worstTeamQualifies", worstPick ? `Worst Team pick qualifies from groups: ${worstPick}` : "Worst Team pick qualifies from groups",
     !worstGroupStatus ? "pending" : (worstGroupStatus.qualified ? "hit" : "miss"),
     BONUS_RULE_POINTS.worstTeamQualifies);
+
+  // Worst Team correct: +5 for naming the tournament's actual worst team (confirmed by Gwil).
+  add("worstTeamCorrect", worstPick ? `Worst Team correct: ${worstPick}` : "Worst Team correct",
+    !CONFIRMED_WORST_TEAM ? "pending" : (worstPick && teamsMatch(worstPick, CONFIRMED_WORST_TEAM) ? "hit" : "miss"),
+    BONUS_RULE_POINTS.worstTeamCorrect);
 
   if (!championsCode) {
     add("championsNonSeededLoss", "Champions pick lost to a non-seeded team", "pending", 0);
@@ -3005,7 +3014,7 @@ const CATEGORY_RULE_IDS = {
   "Champions": ["champions", "championsGroupExit", "championsNonSeededLoss"],
   "Runner Up": ["runnerUp"],
   "3rd Place": ["thirdPlace"],
-  "Worst Team": ["worstTeamQualifies"],
+  "Worst Team": ["worstTeamCorrect", "worstTeamQualifies"],
   "Golden Boot": ["goldenBoot", "goldenBootGoals", "goldenBootDreamTeam", "trumpHighFiveBoot", "missedPenaltyConfirmed"],
   "Golden Ball": ["goldenBall", "yellowCardAutoBall", "redCardAmbiguousBall"],
   "Golden Glove": ["goldenGlove", "trumpHighFiveGlove"],
@@ -3208,6 +3217,7 @@ function renderBonusRulesTable() {
     { label: "Champions / Runner Up / 3rd Place pick correct", pts: `+${DEFAULT_BRACKET_BONUS}`, when: "Once the Final & 3rd-place playoff are played", scored: true },
     { label: "Golden Boot / Golden Ball / Golden Glove / Best Young Player pick correct", pts: `+${DEFAULT_BRACKET_BONUS}`, when: "Once FIFA announces the awards, after the Final", scored: true },
     { label: "Most Goals / Fewest Goals (Group Stage) pick correct", pts: `+${DEFAULT_BRACKET_BONUS}`, when: "Once every group has finished", scored: true },
+    { label: "Worst Team pick correct", pts: `+${BONUS_RULE_POINTS.worstTeamCorrect}`, when: "Once Gwil confirms the tournament's worst team", scored: true },
     { label: "Dark Horse pick reaches the semi-final", pts: `+${BONUS_RULE_POINTS.darkHorseSemi}`, when: "Once the semi-final line-up is set", scored: true },
     { label: "Golden Boot pick named in the Team of the Tournament", pts: `+${BONUS_RULE_POINTS.teamOfTournament}`, when: "After the Final", scored: true },
     { label: "Best Young Player pick named in the Team of the Tournament (stacks with the line above)", pts: `+${BONUS_RULE_POINTS.teamOfTournament}`, when: "After the Final", scored: true },

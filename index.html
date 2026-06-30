@@ -551,12 +551,12 @@
   }
   .confirm-result-btn:hover { background: #4caf77; color: #fff; }
   .et-toggle-btn {
-    border: 1px solid #aaa; background: transparent; border-radius: 4px;
-    cursor: pointer; font-size: 10px; padding: 2px 5px; color: #888;
-    line-height: 1; margin-left: 4px;
+    border: 1px solid #e8a020; background: transparent; border-radius: 4px;
+    cursor: pointer; font-size: 10px; padding: 2px 5px; color: #e8a020;
+    line-height: 1; margin-left: 4px; font-weight: 600;
   }
-  .et-toggle-btn:hover { border-color: #e8a020; color: #e8a020; }
-  .et-toggle-btn.et-active { border-color: #e8a020; color: #e8a020; background: #fff8ee; font-weight: 600; }
+  .et-toggle-btn:hover { background: #fff8ee; }
+  .et-toggle-btn.et-active { border-color: #4caf77; color: #4caf77; background: #eafaf0; }
   .reset-live-btn:hover { color: #22a855; border-color: #22a855; }
   .compact-fixture-banner { display: none; }
   .compact-fixture-row {
@@ -1025,7 +1025,9 @@ let tournamentFacts = loadTournamentFacts();
 function getActual(mwIndex, fixIndex, fixture) {
   const key = mwIndex + "_" + fixIndex;
   if (overrides[key] && (overrides[key].h !== "" && overrides[key].a !== "")) {
-    return { h: Number(overrides[key].h), a: Number(overrides[key].a) };
+    const ov = overrides[key];
+    // Carry the pens winner through so gradeFixture can apply knockout half-points scoring.
+    return { h: Number(ov.h), a: Number(ov.a), ...(ov.aetWinner ? { aetWinner: ov.aetWinner } : {}) };
   }
   if (overrides[key] && (overrides[key].h === "" || overrides[key].a === "")) {
     return null;
@@ -1033,7 +1035,7 @@ function getActual(mwIndex, fixIndex, fixture) {
   if (liveData[key] && !liveManualOverrideKeys.has(key)) {
     return { h: liveData[key].h, a: liveData[key].a };
   }
-  return fixture.actual; // fall back to source data
+  return fixture.actual; // fall back to source data (may carry aetWinner/wentToET if baked in)
 }
 
 function outcome(h, a) {
@@ -1060,25 +1062,23 @@ const MATCHWEEK_WINNER_BONUS = 5;
 const SHOW_MANUAL_FALLBACKS = false;
 
 // Correct result = +stake. Exact correct score = +stake doubled. Wrong result = -stake.
-// If game went to ET (wentToET flag on actual):
-//   - Exact AET score = double points
-//   - Correct team going through (aetWinner for pens; AET score direction for ET-settled) = half points
-//   - Wrong = minus stake (includes non-exact draw predictions in ET games)
+// Scoring is on the AET scoreline. Extra-time/penalties only adds ONE exception: when a tie ends
+// level after ET and is settled on penalties (actual.aetWinner set), a prediction of the team that
+// went through on pens — which would otherwise be "wrong" on a drawn scoreline — earns HALF points.
+// Draw-pickers still score normally (they called the result); an exact draw still earns double.
 function gradeFixture(pred, actual) {
   if (!actual || !pred) return null;
   const exact = pred.h === actual.h && pred.a === actual.a;
-  const aetWinner = actual.aetWinner || (actual.wentToET ? outcome(actual.h, actual.a) : null);
-  if (aetWinner) {
-    // Game went to ET — FT score irrelevant, AET score is what counts
-    if (exact) return { pts: pred.stake * 2, correct: true, exact: true };
-    const predOut = outcome(pred.h, pred.a);
-    const correct = predOut !== "D" && predOut === aetWinner;
-    return { pts: correct ? pred.stake * 0.5 : -pred.stake, correct, exact: false, halfPoints: correct };
+  if (exact) return { pts: pred.stake * 2, correct: true, exact: true };
+  const actualOut = outcome(actual.h, actual.a);
+  const predOut = outcome(pred.h, pred.a);
+  if (actualOut === "D" && actual.aetWinner && predOut !== "D") {
+    const calledWinner = predOut === actual.aetWinner;
+    return { pts: calledWinner ? pred.stake * 0.5 : -pred.stake, correct: calledWinner, exact: false, halfPoints: calledWinner };
   }
-  // Normal time result
-  const correct = outcome(pred.h, pred.a) === outcome(actual.h, actual.a);
+  const correct = predOut === actualOut;
   if (!correct) return { pts: -pred.stake, correct: false, exact: false };
-  return { pts: exact ? pred.stake * 2 : pred.stake, correct: true, exact };
+  return { pts: pred.stake, correct: true, exact: false };
 }
 
 // Matchweek-leader bonus tie-break, in order: (1) highest matchweek points (doubled scores count),
@@ -2376,10 +2376,20 @@ function renderActualCell(mwIndex, fixIndex, hVal, aVal) {
   if (locked) {
     const mwLocked = DATA.matchweeks[mwIndex];
     const ov = overrides[key] || {};
-    const isET = !!(ov.aetWinner || ov.wentToET);
-    const etToggle = isKnockoutMatchweek(mwLocked) && confirmed
-      ? `<button class="et-toggle-btn${isET ? ' et-active' : ''}" data-key="${key}" title="${isET ? 'Mark as normal time result' : 'Mark as went to Extra Time'}">${isET ? 'ET ✓' : 'ET?'}</button>`
-      : '';
+    // Pens winner only matters when the tie ends level (decided on penalties). Backers of the team
+    // that went through get half points; everyone else scores on the drawn line as normal.
+    const isDraw = hVal !== "" && aVal !== "" && Number(hVal) === Number(aVal);
+    let etToggle = '';
+    if (isKnockoutMatchweek(mwLocked) && confirmed && isDraw) {
+      const w = ov.aetWinner;
+      const homeCode = TEAM_CODE[fixture.home] || "Home";
+      const awayCode = TEAM_CODE[fixture.away] || "Away";
+      const label = w === "H" ? `Pens: ${homeCode}` : w === "A" ? `Pens: ${awayCode}` : "Pens winner?";
+      const title = w
+        ? "Penalty shootout winner — their backers get half points. Click to change."
+        : "Drawn after extra time? Click to set who won on penalties (their backers get half points).";
+      etToggle = `<button class="et-toggle-btn${w ? ' et-active' : ''}" data-key="${key}" title="${title}">${label}</button>`;
+    }
     return `<div class="actual-wrap" data-actual-wrap="${key}">
       <span class="actual-badge" data-key="${key}" tabindex="0" title="Click to correct this result">${hVal}-${aVal} <span class="edit-pencil">✎</span></span>
       ${etToggle}${clearBtn}
@@ -3467,13 +3477,11 @@ function attachInputListeners() {
     btn.addEventListener("click", () => {
       const key = btn.dataset.key;
       const ov = overrides[key] || {};
-      const isET = !!(ov.aetWinner || ov.wentToET);
-      if (isET) {
-        delete overrides[key].aetWinner;
-        delete overrides[key].wentToET;
-      } else {
-        overrides[key] = { ...ov, wentToET: true };
-      }
+      // Cycle the pens winner: none → Home → Away → none.
+      const next = ov.aetWinner === undefined ? "H" : ov.aetWinner === "H" ? "A" : undefined;
+      overrides[key] = { ...ov };
+      if (next) overrides[key].aetWinner = next;
+      else delete overrides[key].aetWinner;
       saveOverrides(overrides);
       flashSaveStatus();
       renderAll();

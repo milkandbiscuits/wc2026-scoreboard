@@ -550,6 +550,13 @@
     line-height: 1; margin-left: 4px; font-weight: 600;
   }
   .confirm-result-btn:hover { background: #4caf77; color: #fff; }
+  .et-toggle-btn {
+    border: 1px solid #aaa; background: transparent; border-radius: 4px;
+    cursor: pointer; font-size: 10px; padding: 2px 5px; color: #888;
+    line-height: 1; margin-left: 4px;
+  }
+  .et-toggle-btn:hover { border-color: #e8a020; color: #e8a020; }
+  .et-toggle-btn.et-active { border-color: #e8a020; color: #e8a020; background: #fff8ee; font-weight: 600; }
   .reset-live-btn:hover { color: #22a855; border-color: #22a855; }
   .compact-fixture-banner { display: none; }
   .compact-fixture-row {
@@ -1053,13 +1060,24 @@ const MATCHWEEK_WINNER_BONUS = 5;
 const SHOW_MANUAL_FALLBACKS = false;
 
 // Correct result = +stake. Exact correct score = +stake doubled. Wrong result = -stake.
+// If game went to ET (wentToET flag on actual):
+//   - Exact AET score = double points
+//   - Correct team going through (aetWinner for pens; AET score direction for ET-settled) = half points
+//   - Wrong = minus stake (includes non-exact draw predictions in ET games)
 function gradeFixture(pred, actual) {
-  // No result yet, OR this player has no prediction for this fixture (e.g. a scored knockout tie
-  // activated before everyone has submitted) — treat as pending/no-score, never a crash or penalty.
   if (!actual || !pred) return null;
+  const exact = pred.h === actual.h && pred.a === actual.a;
+  const aetWinner = actual.aetWinner || (actual.wentToET ? outcome(actual.h, actual.a) : null);
+  if (aetWinner) {
+    // Game went to ET — FT score irrelevant, AET score is what counts
+    if (exact) return { pts: pred.stake * 2, correct: true, exact: true };
+    const predOut = outcome(pred.h, pred.a);
+    const correct = predOut !== "D" && predOut === aetWinner;
+    return { pts: correct ? pred.stake * 0.5 : -pred.stake, correct, exact: false, halfPoints: correct };
+  }
+  // Normal time result
   const correct = outcome(pred.h, pred.a) === outcome(actual.h, actual.a);
   if (!correct) return { pts: -pred.stake, correct: false, exact: false };
-  const exact = pred.h === actual.h && pred.a === actual.a;
   return { pts: exact ? pred.stake * 2 : pred.stake, correct: true, exact };
 }
 
@@ -2356,9 +2374,15 @@ function renderActualCell(mwIndex, fixIndex, hVal, aVal) {
     : "";
 
   if (locked) {
+    const mwLocked = DATA.matchweeks[mwIndex];
+    const ov = overrides[key] || {};
+    const isET = !!(ov.aetWinner || ov.wentToET);
+    const etToggle = isKnockoutMatchweek(mwLocked) && confirmed
+      ? `<button class="et-toggle-btn${isET ? ' et-active' : ''}" data-key="${key}" title="${isET ? 'Mark as normal time result' : 'Mark as went to Extra Time'}">${isET ? 'ET ✓' : 'ET?'}</button>`
+      : '';
     return `<div class="actual-wrap" data-actual-wrap="${key}">
       <span class="actual-badge" data-key="${key}" tabindex="0" title="Click to correct this result">${hVal}-${aVal} <span class="edit-pencil">✎</span></span>
-      ${clearBtn}
+      ${etToggle}${clearBtn}
     </div>`;
   }
   return `<div class="actual-wrap" data-actual-wrap="${key}">
@@ -2410,6 +2434,9 @@ function renderFixtureRow(mwIndex, fixIndex, fixture) {
     } else if (g.exact) {
       cls = "exact";
       ptsHtml = `<div class="pts-line exact">+${g.pts} <span class="exact-star">✦</span></div>`;
+    } else if (g.halfPoints) {
+      cls = "correct";
+      ptsHtml = `<div class="pts-line correct">+${g.pts} <span class="exact-star" title="Half points — correct via ET/pens">½</span></div>`;
     } else if (g.correct) {
       cls = "correct";
       ptsHtml = `<div class="pts-line correct">+${g.pts}</div>`;
@@ -3436,6 +3463,22 @@ function attachInputListeners() {
       restoreScrollState(s);
     });
   });
+  document.querySelectorAll(".et-toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.key;
+      const ov = overrides[key] || {};
+      const isET = !!(ov.aetWinner || ov.wentToET);
+      if (isET) {
+        delete overrides[key].aetWinner;
+        delete overrides[key].wentToET;
+      } else {
+        overrides[key] = { ...ov, wentToET: true };
+      }
+      saveOverrides(overrides);
+      flashSaveStatus();
+      renderAll();
+    });
+  });
   document.querySelectorAll(".confirm-result-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const key = btn.dataset.key;
@@ -3639,10 +3682,14 @@ function parseGroupWikitext(wikitext) {
 // parser, so fetchLiveScores confirms knockout fixtures by team code exactly like group games.
 function parseKnockoutBracket(wikitext) {
   const results = [];
-  const re = /\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}\s*\|\s*(\d+)\s*\|\s*\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}\s*\|\s*(\d+)/g;
+  // Scores may be bare digits or "1 (4)" for penalty shootouts. {{pso}} marks the team that won on pens.
+  const re = /\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}(\s*\{\{pso\}\})?\s*\|\s*(\d+)(?:\s*\(\d+\))?\s*\|\s*\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}(\s*\{\{pso\}\})?\s*\|\s*(\d+)(?:\s*\(\d+\))?/g;
   let m;
   while ((m = re.exec(wikitext)) !== null) {
-    results.push({ code1: m[1], code2: m[3], h: Number(m[2]), a: Number(m[4]) });
+    const code1 = m[1], pso1 = !!m[2], code2 = m[4], pso2 = !!m[5];
+    const h = Number(m[3]), a = Number(m[6]);
+    const aetWinner = pso2 ? "A" : pso1 ? "H" : null;
+    results.push({ code1, code2, h, a, aetWinner });
   }
   return results;
 }
@@ -4008,7 +4055,10 @@ async function fetchLiveScores() {
       // Wikipedia also shows live scores mid-match. The live feed will clear liveData[key]
       // once the match ends, at which point fetchLiveScores can confirm normally.
       if (liveData[key]) return;
-      overrides[key] = { h: String(h), a: String(a), source: "fetch" };
+      const aetWinner = match.aetWinner
+        ? (match.code1 === homeCode ? match.aetWinner : match.aetWinner === "H" ? "A" : "H")
+        : undefined;
+      overrides[key] = { h: String(h), a: String(a), source: "fetch", ...(aetWinner ? { aetWinner } : {}) };
       unlockedKeys.delete(key); // re-lock with the corrected value if it was open for editing
       if (hasExisting) {
         corrected++;

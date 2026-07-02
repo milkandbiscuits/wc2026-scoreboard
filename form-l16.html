@@ -336,14 +336,19 @@ function validate() {
   stakes.forEach(s => { if (s) counts[s] = (counts[s] || 0) + 1; });
   const dups = new Set(Object.keys(counts).filter(k => counts[k] > 1).map(Number));
 
-  // Grey out (disable) any confidence number already used in another fixture, so it
-  // can't be picked twice. Each box's own current value and the "–" stay selectable.
+  // Disable any confidence number already used in another fixture so it can't be
+  // picked twice. iOS Safari ignores the red/strikethrough styling on dropdown
+  // options, so we also relabel unavailable numbers "N — used" (plain text renders
+  // everywhere). Each box's own value and the "–" stay selectable.
   const usedStakes = new Set(stakes.filter(s => s));
   FIXTURES.forEach((_, fi) => {
     const sel = document.getElementById(`stake${fi}`);
     [...sel.options].forEach(opt => {
       const v = parseInt(opt.value);
-      opt.disabled = !!v && usedStakes.has(v) && v !== stakes[fi];
+      if (!v) return;                                   // leave the "–" option alone
+      const unavailable = usedStakes.has(v) && v !== stakes[fi];
+      opt.disabled = unavailable;
+      opt.textContent = unavailable ? `${v} — used` : `${v}`;
     });
   });
 

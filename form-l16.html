@@ -130,6 +130,13 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 .submit-error.visible { display: block; }
 .submit-error a { color: var(--accent-dark); font-weight: 600; }
 
+.restored-note {
+  font-size: 13px; color: var(--text); background: var(--bg-green);
+  border: 1px solid #86efac; border-left: 3px solid var(--green); border-radius: 10px;
+  padding: 9px 12px; margin: 0 0 10px; line-height: 1.5; display: none;
+}
+.restored-note.visible { display: block; }
+
 .excel-row { display: flex; gap: 8px; margin-top: 12px; }
 .excel-btn {
   flex: 1; padding: 9px 10px; font-size: 13px; font-weight: 500;
@@ -171,6 +178,8 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 </header>
 
 <div class="container" id="form-container">
+
+  <div class="restored-note" id="restored-note">↩ Restored your saved picks — they're kept on this device until you submit.</div>
 
   <div class="card">
     <label class="field-label" for="player-select">Your name</label>
@@ -343,7 +352,73 @@ function validate() {
     : hasDups ? 'Fix duplicate stakes to submit'
     : filled < N ? `${N - filled} fixture${N - filled > 1 ? 's' : ''} still to fill in`
     : 'Submit predictions';
+
+  saveDraft();
 }
+
+// ── Draft auto-save (localStorage) ───────────────────────────────────────────
+// Persists in-progress picks so a reload — accidental, or to pick up a newly
+// locked fixture — never wipes them. Saved on every input (via validate), matched
+// back to fixtures by team signature so it survives a tie being locked (score +
+// stake carry over; a now-moot dropdown pick is dropped) or the ties being
+// reordered. Cleared on a successful submit.
+const DRAFT_KEY = 'wc26-l16-draft';
+let submitted = false;
+
+function tieSignature(fi) {   // sorted lowercase set of every team that could be in this tie
+  const teams = [];
+  [FIXTURES[fi][0], FIXTURES[fi][1]].forEach(slot => isSlot(slot) ? teams.push(...slot) : teams.push(slot));
+  return teams.map(t => String(t).toLowerCase()).sort();
+}
+
+function saveDraft() {
+  if (submitted) return;
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      v: 1,
+      player: document.getElementById('player-select').value,
+      savedAt: Date.now(),
+      ties: FIXTURES.map((_, fi) => ({
+        sig: tieSignature(fi),
+        h: document.getElementById(`sh${fi}`).value,
+        a: document.getElementById(`sa${fi}`).value,
+        stake: document.getElementById(`stake${fi}`).value,
+        teamH: (document.getElementById(`team${fi}h`) || {}).value || '',
+        teamA: (document.getElementById(`team${fi}a`) || {}).value || '',
+      })),
+    }));
+  } catch (e) { /* storage disabled/full — the form still works, just no draft */ }
+}
+
+function loadDraft() {
+  let draft;
+  try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) { return false; }
+  if (!draft || !Array.isArray(draft.ties)) return false;
+  if (draft.player) document.getElementById('player-select').value = draft.player;
+
+  let restored = 0;
+  FIXTURES.forEach((_, fi) => {
+    const curSig = tieSignature(fi);
+    // Teams are unique to one tie, so a saved tie matches iff its (older, ≥-team)
+    // signature covers every team currently in this tie.
+    const saved = draft.ties.find(t => Array.isArray(t.sig) && curSig.every(team => t.sig.includes(team)));
+    if (!saved) return;
+    const set = (id, val) => { if (val !== '' && val != null) document.getElementById(id).value = val; };
+    set(`sh${fi}`, saved.h);
+    set(`sa${fi}`, saved.a);
+    set(`stake${fi}`, saved.stake);
+    ['h', 'a'].forEach(side => {                       // only restore a pick if the slot is still selectable
+      const sel = document.getElementById(`team${fi}${side}`);
+      const pick = side === 'h' ? saved.teamH : saved.teamA;
+      if (sel && pick && [...sel.options].some(o => o.value === pick)) sel.value = pick;
+    });
+    if (saved.h !== '' || saved.a !== '' || saved.stake !== '') restored++;
+  });
+  return restored > 0;
+}
+
+function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch (e) {} }
+function showRestoredNote() { const n = document.getElementById('restored-note'); if (n) n.classList.add('visible'); }
 
 // ── Where submitted picks go ─────────────────────────────────────────────────
 // The scoreboard is a static page with no backend, so picks are emailed to Gwil.
@@ -418,6 +493,8 @@ async function handleSubmit() {
     document.querySelector('.submit-bar').style.display = 'none';
     document.getElementById('success-screen').style.display = 'block';
     window.scrollTo(0, 0);
+    submitted = true;
+    clearDraft();
   } catch (err) {
     // Network/relay failure — don't lose the picks: offer a pre-filled email instead.
     console.error('Auto-submit failed, falling back to mailto', err);
@@ -434,7 +511,9 @@ async function handleSubmit() {
 }
 
 buildList();
+const draftRestored = loadDraft();
 validate();
+if (draftRestored) showRestoredNote();
 
 function downloadTemplate() {
   if (typeof XLSX === 'undefined') { alert('Still loading — try again in a moment'); return; }

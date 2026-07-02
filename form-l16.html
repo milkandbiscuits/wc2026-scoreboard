@@ -82,6 +82,13 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 }
 .fixture-card.complete { border-color: #86efac; }
 .fixture-card.error { border-color: var(--red); }
+.clear-all-btn {
+  display: block; width: 100%; margin: 4px 0 0; padding: 11px;
+  font-size: 14px; font-weight: 500; color: var(--text-muted);
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: 10px; cursor: pointer;
+}
+.clear-all-btn:hover { color: var(--red); border-color: var(--red); }
 
 /* Two-row grid: team names sit directly above their own score box (col 1 = home,
    col 2 = v/–, col 3 = away, col 4 = confidence). */
@@ -225,6 +232,8 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 
   <div id="fixture-list"></div>
 
+  <button type="button" class="clear-all-btn" onclick="clearAllPredictions()">Clear all predictions</button>
+
 </div>
 
 <div class="success-screen" id="success-screen">
@@ -328,6 +337,21 @@ function buildList() {
       </div>`;
     list.appendChild(card);
   });
+}
+
+// Clear every prediction for all fixtures — scores, confidence numbers, and team picks.
+function clearAllPredictions() {
+  if (!confirm('Clear ALL your predictions — scores and confidence numbers? This cannot be undone.')) return;
+  FIXTURES.forEach((_, fi) => {
+    document.getElementById(`sh${fi}`).value = '';
+    document.getElementById(`sa${fi}`).value = '';
+    document.getElementById(`stake${fi}`).value = '';
+    ['h', 'a'].forEach(side => {
+      const t = document.getElementById(`team${fi}${side}`);
+      if (t) t.value = '';
+    });
+  });
+  validate();
 }
 
 function validate() {

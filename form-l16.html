@@ -130,6 +130,11 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 .submit-error.visible { display: block; }
 .submit-error a { color: var(--accent-dark); font-weight: 600; }
 
+.save-note {
+  font-size: 12.5px; color: var(--text-muted); line-height: 1.5;
+  background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25);
+  border-radius: 10px; padding: 9px 12px; margin: 0 0 10px;
+}
 .restored-note {
   font-size: 13px; color: var(--text); background: var(--bg-green);
   border: 1px solid #86efac; border-left: 3px solid var(--green); border-radius: 10px;
@@ -174,12 +179,13 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 
 <header>
   <h1>WC 2026 · Round of 16</h1>
-  <p>Deadline: kickoff of first game</p>
+  <p id="deadline">Predictions needed by…</p>
 </header>
 
 <div class="container" id="form-container">
 
-  <div class="restored-note" id="restored-note">↩ Restored your saved picks — they're kept on this device until you submit.</div>
+  <div class="save-note" id="save-note">💾 Your predictions will save even if you refresh or close the browser — come back on the same device to finish.</div>
+  <div class="restored-note" id="restored-note">↩ Restored your saved picks — they save automatically, even if you refresh or close the browser.</div>
 
   <div class="card">
     <label class="field-label" for="player-select">Your name</label>
@@ -246,6 +252,25 @@ const FIXTURES = [
 ];
 const N = FIXTURES.length;
 
+// Header deadline = 2 hours before the first Round-of-16 kickoff. FIRST_KO is the
+// earliest R16 kickoff from the scoreboard schedule — update it each round.
+const FIRST_KO = new Date('2026-07-04T17:00:00Z');
+const DEADLINE = new Date(FIRST_KO.getTime() - 2 * 60 * 60 * 1000);
+function renderDeadline() {
+  const el = document.getElementById('deadline');
+  if (!el) return;
+  const p = {};
+  new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',   // pin to UK time so it reads the same for everyone
+    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(DEADLINE).forEach(x => p[x.type] = x.value);
+  let h = parseInt(p.hour, 10);
+  const ampm = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  const time = p.minute === '00' ? `${h}${ampm}` : `${h}:${p.minute}${ampm}`;   // "4pm" or "4:30pm"
+  el.textContent = `Predictions needed by ${time} ${p.weekday} ${p.day} ${p.month}`;
+}
+
 const isSlot = s => Array.isArray(s);                                  // true = teams not yet decided
 const slotLabel = s => isSlot(s) ? `Winner (${s[0]} / ${s[1]})` : s;   // canonical placeholder text
 const hasPicks = fi => isSlot(FIXTURES[fi][0]) || isSlot(FIXTURES[fi][1]);
@@ -308,6 +333,17 @@ function validate() {
   const counts = {};
   stakes.forEach(s => { if (s) counts[s] = (counts[s] || 0) + 1; });
   const dups = new Set(Object.keys(counts).filter(k => counts[k] > 1).map(Number));
+
+  // Grey out (disable) any confidence number already used in another fixture, so it
+  // can't be picked twice. Each box's own current value and the "–" stay selectable.
+  const usedStakes = new Set(stakes.filter(s => s));
+  FIXTURES.forEach((_, fi) => {
+    const sel = document.getElementById(`stake${fi}`);
+    [...sel.options].forEach(opt => {
+      const v = parseInt(opt.value);
+      opt.disabled = !!v && usedStakes.has(v) && v !== stakes[fi];
+    });
+  });
 
   let filled = 0;
   FIXTURES.forEach((_, fi) => {
@@ -418,7 +454,10 @@ function loadDraft() {
 }
 
 function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch (e) {} }
-function showRestoredNote() { const n = document.getElementById('restored-note'); if (n) n.classList.add('visible'); }
+function showRestoredNote() {
+  const s = document.getElementById('save-note'); if (s) s.style.display = 'none';   // swap the generic note for the restored one
+  const n = document.getElementById('restored-note'); if (n) n.classList.add('visible');
+}
 
 // ── Where submitted picks go ─────────────────────────────────────────────────
 // The scoreboard is a static page with no backend, so picks are emailed to Gwil.
@@ -510,6 +549,7 @@ async function handleSubmit() {
   }
 }
 
+renderDeadline();
 buildList();
 const draftRestored = loadDraft();
 validate();

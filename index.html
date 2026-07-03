@@ -770,7 +770,7 @@
   #gwil-splash {
     position: fixed; inset: 0; z-index: 99999; background: #1a2b49;
     display: flex; align-items: center; justify-content: center;
-    animation: gwilSplashOut 0.5s ease-in 1.5s forwards;
+    animation: gwilSplashOut 0.5s ease-in 2.0s forwards;
   }
   #gwil-splash img {
     width: min(62vw, 300px); height: auto;
@@ -793,7 +793,7 @@
   var seen = false; try { seen = sessionStorage.getItem("gwilSplashShown") === "1"; } catch(e){}
   if (reduce || seen) { el.parentNode && el.parentNode.removeChild(el); return; }
   try { sessionStorage.setItem("gwilSplashShown", "1"); } catch(e){}
-  setTimeout(function(){ el.parentNode && el.parentNode.removeChild(el); }, 2050);
+  setTimeout(function(){ el.parentNode && el.parentNode.removeChild(el); }, 2550);
 })();
 </script>
 

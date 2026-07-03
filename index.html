@@ -1055,6 +1055,7 @@ let liveData = loadLiveData(); // key → { h, a } — persists across page refr
 let liveGoalsSeen = {};        // key → last-seen total goals THIS session (in-memory, so a goal that
                                // happened while the tab was closed never fires a splash on load)
 let liveOnLoadChecked = false; // gate so the "live game on load" splash only fires on the first poll
+let confirmFetchScheduled = false; // avoid stacking auto Wikipedia-confirm fetches when a match ends
 let liveManualOverrideKeys = new Set(); // keys where user chose "Clear & enter own" instead of live feed
 let liveAbsentPollCount = {}; // consecutive polls where a key was absent from CF worker response
 const LIVE_WORKER_URL = "https://wc-live-scores.matt-969.workers.dev/";
@@ -4321,6 +4322,7 @@ async function pollLiveScores() {
     // Retire liveData for matches the CF worker is no longer returning (match ended).
     // Require 2 consecutive absent polls (~10s) before clearing, so a single stale
     // API response mid-match doesn't falsely wipe a live score.
+    let retiredAny = false;
     Object.keys(liveData).forEach(k => {
       if (activeKeys.has(k)) {
         liveAbsentPollCount[k] = 0;
@@ -4331,9 +4333,18 @@ async function pollLiveScores() {
           delete liveAbsentPollCount[k];
           saveLiveData();
           updated = true;
+          retiredAny = true;
         }
       }
     });
+    // A live match just ended (dropped by the worker). Pull Wikipedia to CONFIRM the finished result
+    // so a long-open tab advances on its own instead of staying stuck on the finished game — the 5s
+    // poll only tracks live scores, it never confirms results. One delayed retry covers Wikipedia lag.
+    if (retiredAny && !confirmFetchScheduled && typeof fetchLiveScores === "function") {
+      confirmFetchScheduled = true;
+      fetchLiveScores();
+      setTimeout(() => { confirmFetchScheduled = false; fetchLiveScores(); }, 120000);
+    }
     // Only re-render if data changed and nobody is mid-typing in a score input
     if (updated && !document.querySelector(".score-input:focus")) {
       renderAll();

@@ -3758,11 +3758,17 @@ function parseGroupWikitext(wikitext) {
 // parser, so fetchLiveScores confirms knockout fixtures by team code exactly like group games.
 function parseKnockoutBracket(wikitext) {
   const results = [];
-  // Scores may be bare digits or "1 (4)" for penalty shootouts. {{pso}} marks the team that won on pens.
-  const re = /\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}(\s*\{\{pso\}\})?\s*\|\s*(\d+)(?:\s*\(\d+\))?\s*\|\s*\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}(\s*\{\{pso\}\})?\s*\|\s*(\d+)(?:\s*\(\d+\))?/g;
+  // A team's flag can be followed by result markers before the score cell: {{pso}} (penalty-shootout
+  // winner) or {{aet}} (match decided after extra time), e.g. "{{fb|BEL}} {{aet}}|3". Match ANY such
+  // {{...}} markers so those games still parse (missing this leaves a finished tie stuck showing LIVE),
+  // then read {{pso}} out of them to know who went through on pens.
+  const marks = String.raw`((?:\s*\{\{[a-z]+\}\})*)`;
+  const re = new RegExp(
+    String.raw`\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}` + marks + String.raw`\s*\|\s*(\d+)(?:\s*\(\d+\))?\s*\|\s*` +
+    String.raw`\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}` + marks + String.raw`\s*\|\s*(\d+)(?:\s*\(\d+\))?`, "g");
   let m;
   while ((m = re.exec(wikitext)) !== null) {
-    const code1 = m[1], pso1 = !!m[2], code2 = m[4], pso2 = !!m[5];
+    const code1 = m[1], pso1 = /\{\{pso\}\}/.test(m[2] || ""), code2 = m[4], pso2 = /\{\{pso\}\}/.test(m[5] || "");
     const h = Number(m[3]), a = Number(m[6]);
     const aetWinner = pso2 ? "A" : pso1 ? "H" : null;
     results.push({ code1, code2, h, a, aetWinner });

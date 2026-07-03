@@ -4533,13 +4533,12 @@ document.getElementById("rotate-mug").src = getGwilMugSrc();
       ind.classList.remove("ptr-ready");
       ind.classList.add("ptr-refreshing");
       ind.style.opacity = "1";
-      // Pull-to-refresh in the installed app is a soft data refresh (no page reload), so the
-      // load splash never runs here. Fire it manually so the home-screen app gets the splash too.
-      if (typeof playGwilSplash === "function") playGwilSplash();
-      const btn = document.querySelector(".js-fetch-btn");
-      if (btn) btn.click();
-      else if (typeof fetchLiveScores === "function") fetchLiveScores();
-      setTimeout(() => { refreshing = false; reset(); }, 1600);
+      // Full reload rather than a soft data-only fetch: the installed app suspends background timers,
+      // so a soft refresh left it showing stale state (e.g. no live match) vs the browser. A reload
+      // re-runs init (live-score polling repopulates the live match) and replays the splash — we clear
+      // the once-per-session gate first so the splash shows on every pull-to-refresh.
+      try { sessionStorage.removeItem("gwilSplashShown"); } catch (e) {}
+      setTimeout(() => location.reload(), 250);
     } else {
       reset();
     }

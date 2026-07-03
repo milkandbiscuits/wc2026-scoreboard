@@ -785,6 +785,19 @@
     animation: gwilCapIn 0.4s ease-out 0.35s both;
   }
   @keyframes gwilCapIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  /* Goal celebration: the mug wobbles after it bounces in, and the caption shouts a bit louder. */
+  #gwil-splash.goal-celebrate img {
+    animation: gwilMugIn 0.5s cubic-bezier(.2,.9,.3,1.3) both, goalWobble 0.55s ease-in-out 0.55s 2;
+  }
+  @keyframes goalWobble {
+    0%, 100% { transform: rotate(0deg) scale(1); }
+    20% { transform: rotate(-7deg) scale(1.06); }
+    50% { transform: rotate(6deg) scale(1.06); }
+    80% { transform: rotate(-3deg) scale(1.03); }
+  }
+  #gwil-splash.goal-celebrate .splash-caption {
+    font-size: 21px; font-weight: 700; letter-spacing: 0.3px;
+  }
   @media (prefers-reduced-motion: reduce) { #gwil-splash { display: none !important; } }
 </style>
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "c3facaaba735463097b2a1ce8cc4eb46"}'></script><!-- End Cloudflare Web Analytics -->
@@ -2058,8 +2071,9 @@ function getGwilMugSrc() {
 
 // Full-screen Gwil splash for triggered moments (a goal, a live game on load). Reuses the
 // #gwil-splash CSS/animation. Won't stack — a no-op if a splash is already on screen — and
-// respects reduced-motion. Optional caption shows under the mug.
-function playGwilSplash(caption) {
+// respects reduced-motion. Optional caption shows under the mug; celebrate=true adds the
+// goal wobble + bigger caption.
+function playGwilSplash(caption, celebrate) {
   try {
     if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   } catch (e) {}
@@ -2068,6 +2082,7 @@ function playGwilSplash(caption) {
   if (!src) return;
   const el = document.createElement("div");
   el.id = "gwil-splash";
+  if (celebrate) el.className = "goal-celebrate";
   el.setAttribute("aria-hidden", "true");
   el.innerHTML = `<img src="${src}" alt="">` + (caption ? `<div class="splash-caption">${caption}</div>` : "");
   document.body.appendChild(el);
@@ -4229,7 +4244,7 @@ async function pollLiveScores() {
               // landed while the tab was shut never triggers on load.
               const total = (h || 0) + (a || 0);
               if (liveGoalsSeen[key] !== undefined && total > liveGoalsSeen[key]) {
-                playGwilSplash(`⚽ GOAL!<br>${fixture.home} ${h}–${a} ${fixture.away}`);
+                playGwilSplash(`⚽ GOOOAAAL!<br>${fixture.home} ${h}–${a} ${fixture.away}`, true);
               }
               liveGoalsSeen[key] = total;
             }
@@ -4518,6 +4533,9 @@ document.getElementById("rotate-mug").src = getGwilMugSrc();
       ind.classList.remove("ptr-ready");
       ind.classList.add("ptr-refreshing");
       ind.style.opacity = "1";
+      // Pull-to-refresh in the installed app is a soft data refresh (no page reload), so the
+      // load splash never runs here. Fire it manually so the home-screen app gets the splash too.
+      if (typeof playGwilSplash === "function") playGwilSplash();
       const btn = document.querySelector(".js-fetch-btn");
       if (btn) btn.click();
       else if (typeof fetchLiveScores === "function") fetchLiveScores();

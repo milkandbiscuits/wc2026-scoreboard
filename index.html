@@ -2088,6 +2088,50 @@ function playGwilSplash(caption, celebrate) {
   document.body.appendChild(el);
   setTimeout(() => { el.parentNode && el.parentNode.removeChild(el); }, 2550);
 }
+
+// Easter egg: tap Gwil's header mug for a full-screen Gwil moment. The line is picked fresh each
+// tap and is standings-aware — if Gwil's chasing, it names who he's after and the gap; if he's top,
+// he gloats. Mixed with a few evergreen quips for variety.
+(function mugTap() {
+  const mug = document.querySelector(".gwil-mug");
+  if (!mug) return;
+  mug.style.cursor = "pointer";
+  mug.setAttribute("title", "Gwil");
+  const GENERIC = [
+    "Gwil-I-Am in charge of the points! 🎩",
+    "My rules. My points. 😏",
+    "Respect the cap 🧢",
+    "Gwil giveth, Gwil taketh away ⚽",
+  ];
+  const nm = p => (p === "🤖" ? "the robot 🤖" : p);
+  const g = n => (Math.round(n * 10) / 10); // tidy any half-point gaps
+  let last = "";
+  mug.addEventListener("click", () => {
+    const pool = GENERIC.slice();
+    try {
+      const totals = computeTotals();
+      const standings = DATA.players
+        .map(p => ({ player: p, total: totals[p].total }))
+        .sort((a, b) => b.total - a.total || a.player.localeCompare(b.player));
+      const i = standings.findIndex(s => s.player === "Gwil");
+      if (i === 0) {
+        const lead = g(standings[0].total - standings[1].total);
+        pool.push("Top of the pile. As it should be 👑", "Still your leader 🎩",
+          `${lead} clear at the top. Catch me if you can 👀`);
+      } else if (i > 0) {
+        const me = standings[i], above = standings[i - 1], leader = standings[0];
+        const gapAbove = g(above.total - me.total), gapTop = g(leader.total - me.total);
+        if (gapAbove === 0) pool.push(`Level with ${nm(above.player)} — first to blink loses 👀`);
+        else pool.push(`Just ${gapAbove} behind ${nm(above.player)} 👀`, `${gapAbove} off ${nm(above.player)} — watch your back 😏`);
+        pool.push(`Chasing ${nm(leader.player)} for top spot — ${gapTop} to make up 🎯`, `Coming for you, ${nm(leader.player)} 👀`);
+      }
+    } catch (e) { /* standings unavailable — evergreen quips still work */ }
+    let q; do { q = pool[Math.floor(Math.random() * pool.length)]; } while (pool.length > 1 && q === last);
+    last = q;
+    playGwilSplash(q, true);
+  });
+})();
+
 // True while any ACTIVATED (scored, non-results-only) fixture is still missing a Nick B prediction.
 // Flips to false automatically the moment his last outstanding prediction is added.
 function nickBAwaitingPredictions() {

@@ -1056,6 +1056,7 @@ let liveGoalsSeen = {};        // key → last-seen total goals THIS session (in
                                // happened while the tab was closed never fires a splash on load)
 let liveOnLoadChecked = false; // gate so the "live game on load" splash only fires on the first poll
 let confirmFetchScheduled = false; // avoid stacking auto Wikipedia-confirm fetches when a match ends
+const LIVE_STALE_MS = 3.5 * 60 * 60 * 1000; // a tie is definitely over 3.5h after kickoff (90+ET+pens)
 let liveManualOverrideKeys = new Set(); // keys where user chose "Clear & enter own" instead of live feed
 let liveAbsentPollCount = {}; // consecutive polls where a key was absent from CF worker response
 const LIVE_WORKER_URL = "https://wc-live-scores.matt-969.workers.dev/";
@@ -3850,10 +3851,14 @@ function parseKnockoutBracket(wikitext) {
     String.raw`\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}` + marks + String.raw`\s*\|\s*(\d+)(?:\s*\(\d+\))?`, "g");
   let m;
   while ((m = re.exec(wikitext)) !== null) {
-    const code1 = m[1], pso1 = /\{\{pso\}\}/.test(m[2] || ""), code2 = m[4], pso2 = /\{\{pso\}\}/.test(m[5] || "");
+    const marks1 = m[2] || "", marks2 = m[5] || "";
+    const code1 = m[1], pso1 = /\{\{pso\}\}/.test(marks1), code2 = m[4], pso2 = /\{\{pso\}\}/.test(marks2);
     const h = Number(m[3]), a = Number(m[6]);
     const aetWinner = pso2 ? "A" : pso1 ? "H" : null;
-    results.push({ code1, code2, h, a, aetWinner });
+    // An {{aet}}/{{pso}} marker only appears once a tie is OVER — a definitive "this is final" flag
+    // (a live/in-progress score never carries one). Lets confirmation override a stuck live score.
+    const final = /\{\{(pso|aet)\}\}/.test(marks1 + marks2);
+    results.push({ code1, code2, h, a, aetWinner, final });
   }
   return results;
 }
@@ -4216,9 +4221,16 @@ async function fetchLiveScores() {
       if (hasExisting && Number(existingH) === h && Number(existingA) === a) return; // already correct
 
       // Don't confirm from Wikipedia while the CF worker is actively tracking this match —
-      // Wikipedia also shows live scores mid-match. The live feed will clear liveData[key]
-      // once the match ends, at which point fetchLiveScores can confirm normally.
-      if (liveData[key]) return;
+      // Wikipedia also shows live scores mid-match. Normally the live feed clears liveData[key] once
+      // the match ends. BUT the feed can get stuck (e.g. lingering on PAUSED through a knockout tie's
+      // ET/pens), and a stale live score must not block confirmation forever — that left a finished
+      // tie showing LIVE until a manual clear+fetch. Override the block when the result is definitely
+      // final: it carries an {{aet}}/{{pso}} marker (only present post-match), OR the tie is well past
+      // any possible finish (3.5h after kickoff). Either way, clear the stale live score and confirm.
+      const liveStale = match.final ||
+        (fixture.kickoff && (Date.now() - new Date(fixture.kickoff).getTime()) > LIVE_STALE_MS);
+      if (liveData[key] && !liveStale) return;
+      if (liveData[key]) { delete liveData[key]; delete liveAbsentPollCount[key]; saveLiveData(); }
       const aetWinner = match.aetWinner
         ? (match.code1 === homeCode ? match.aetWinner : match.aetWinner === "H" ? "A" : "H")
         : undefined;
@@ -4324,11 +4336,16 @@ async function pollLiveScores() {
     // API response mid-match doesn't falsely wipe a live score.
     let retiredAny = false;
     Object.keys(liveData).forEach(k => {
-      if (activeKeys.has(k)) {
+      // Retire once the worker stops returning a match (3 absent polls) OR once the tie is so far past
+      // kickoff it must be over (guards against the feed getting stuck on a finished knockout tie).
+      const [mwI, fixI] = k.split("_").map(Number);
+      const fx = DATA.matchweeks[mwI] && DATA.matchweeks[mwI].fixtures[fixI];
+      const tooOld = fx && fx.kickoff && (Date.now() - new Date(fx.kickoff).getTime()) > LIVE_STALE_MS;
+      if (activeKeys.has(k) && !tooOld) {
         liveAbsentPollCount[k] = 0;
       } else {
         liveAbsentPollCount[k] = (liveAbsentPollCount[k] || 0) + 1;
-        if (liveAbsentPollCount[k] >= 3) {
+        if (liveAbsentPollCount[k] >= 3 || tooOld) {
           delete liveData[k];
           delete liveAbsentPollCount[k];
           saveLiveData();

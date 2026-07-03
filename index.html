@@ -1107,8 +1107,15 @@ function getActual(mwIndex, fixIndex, fixture) {
   const key = mwIndex + "_" + fixIndex;
   if (overrides[key] && (overrides[key].h !== "" && overrides[key].a !== "")) {
     const ov = overrides[key];
-    // Carry the pens winner through so gradeFixture can apply knockout half-points scoring.
-    return { h: Number(ov.h), a: Number(ov.a), ...(ov.aetWinner ? { aetWinner: ov.aetWinner } : {}) };
+    // Carry the pens winner (for gradeFixture half-points) plus the ET / shootout info (for the
+    // Movers & Shakers "AET · won X–Y on pens" note) through with the score.
+    return {
+      h: Number(ov.h), a: Number(ov.a),
+      ...(ov.aetWinner ? { aetWinner: ov.aetWinner } : {}),
+      ...(ov.wentToET ? { wentToET: true } : {}),
+      ...(ov.penH != null ? { penH: ov.penH } : {}),
+      ...(ov.penA != null ? { penA: ov.penA } : {}),
+    };
   }
   if (overrides[key] && (overrides[key].h === "" || overrides[key].a === "")) {
     return null;
@@ -3121,7 +3128,21 @@ function renderShakerCard() {
   const resultLabel = plural ? "last results" : "last result";
   const metaScores = lastBatch.map(f => {
     const a = getActual(f.mwIndex, f.fixIndex, f.fixture);
-    return a ? `${f.fixture.home} ${a.h}–${a.a} ${f.fixture.away}` : "";
+    if (!a) return "";
+    let s = `${f.fixture.home} ${a.h}–${a.a} ${f.fixture.away}`;
+    // For a tie that went the distance, note it was AET, and if it was settled on pens name the
+    // winner and the shootout score.
+    if (a.wentToET) {
+      let note = "AET";
+      if (a.aetWinner && a.penH != null && a.penA != null) {
+        const win = a.aetWinner === "H" ? f.fixture.home : f.fixture.away;
+        const wp = a.aetWinner === "H" ? a.penH : a.penA;
+        const lp = a.aetWinner === "H" ? a.penA : a.penH;
+        note = `AET · ${win} won ${wp}–${lp} on pens`;
+      }
+      s += ` <span style="font-style:italic;opacity:0.8">(${note})</span>`;
+    }
+    return s;
   }).filter(Boolean).join(" &nbsp;·&nbsp; ");
   el.innerHTML = `
     <div class="card-title">Gwil's Movers &amp; Shakers <span style="font-weight:400;color:#999;font-size:12px;">(${resultLabel})</span><span class="meta">${metaScores} · ${mwName}</span></div>
@@ -3847,18 +3868,21 @@ function parseKnockoutBracket(wikitext) {
   // then read {{pso}} out of them to know who went through on pens.
   const marks = String.raw`((?:\s*\{\{[a-z]+\}\})*)`;
   const re = new RegExp(
-    String.raw`\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}` + marks + String.raw`\s*\|\s*(\d+)(?:\s*\(\d+\))?\s*\|\s*` +
-    String.raw`\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}` + marks + String.raw`\s*\|\s*(\d+)(?:\s*\(\d+\))?`, "g");
+    String.raw`\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}` + marks + String.raw`\s*\|\s*(\d+)(?:\s*\((\d+)\))?\s*\|\s*` +
+    String.raw`\{\{#invoke:flag\|fb\|([A-Z]{2,3})\}\}` + marks + String.raw`\s*\|\s*(\d+)(?:\s*\((\d+)\))?`, "g");
   let m;
   while ((m = re.exec(wikitext)) !== null) {
-    const marks1 = m[2] || "", marks2 = m[5] || "";
-    const code1 = m[1], pso1 = /\{\{pso\}\}/.test(marks1), code2 = m[4], pso2 = /\{\{pso\}\}/.test(marks2);
-    const h = Number(m[3]), a = Number(m[6]);
+    const marks1 = m[2] || "", marks2 = m[6] || "";
+    const code1 = m[1], pso1 = /\{\{pso\}\}/.test(marks1), code2 = m[5], pso2 = /\{\{pso\}\}/.test(marks2);
+    const h = Number(m[3]), a = Number(m[7]);
+    const penH = m[4] !== undefined ? Number(m[4]) : null; // shootout score in "1 (4)" form, if any
+    const penA = m[8] !== undefined ? Number(m[8]) : null;
     const aetWinner = pso2 ? "A" : pso1 ? "H" : null;
     // An {{aet}}/{{pso}} marker only appears once a tie is OVER — a definitive "this is final" flag
-    // (a live/in-progress score never carries one). Lets confirmation override a stuck live score.
+    // (a live/in-progress score never carries one). Doubles as "went to extra time". Lets confirmation
+    // override a stuck live score, and drives the AET / pens note on Movers & Shakers.
     const final = /\{\{(pso|aet)\}\}/.test(marks1 + marks2);
-    results.push({ code1, code2, h, a, aetWinner, final });
+    results.push({ code1, code2, h, a, aetWinner, penH, penA, wentToET: final, final });
   }
   return results;
 }
@@ -4218,7 +4242,11 @@ async function fetchLiveScores() {
 
       const h = match.code1 === homeCode ? match.h : match.a;
       const a = match.code1 === homeCode ? match.a : match.h;
-      if (hasExisting && Number(existingH) === h && Number(existingA) === a) return; // already correct
+      const scoreMatches = hasExisting && Number(existingH) === h && Number(existingA) === a;
+      // Backfill: an already-confirmed ET/pens tie may pre-date the AET/pens capture. Re-write it (even
+      // with an unchanged score) so Movers & Shakers can show the shootout / AET note.
+      const needsEtInfo = match.final && !ov.wentToET;
+      if (scoreMatches && !needsEtInfo) return; // already fully up to date
 
       // Don't confirm from Wikipedia while the CF worker is actively tracking this match —
       // Wikipedia also shows live scores mid-match. Normally the live feed clears liveData[key] once
@@ -4234,9 +4262,19 @@ async function fetchLiveScores() {
       const aetWinner = match.aetWinner
         ? (match.code1 === homeCode ? match.aetWinner : match.aetWinner === "H" ? "A" : "H")
         : undefined;
-      overrides[key] = { h: String(h), a: String(a), source: "fetch", ...(aetWinner ? { aetWinner } : {}) };
+      // Flip the shootout scores to home/away orientation, same as the main score above.
+      const penHome = match.code1 === homeCode ? match.penH : match.penA;
+      const penAway = match.code1 === homeCode ? match.penA : match.penH;
+      overrides[key] = {
+        h: String(h), a: String(a), source: "fetch",
+        ...(aetWinner ? { aetWinner } : {}),
+        ...(match.wentToET ? { wentToET: true } : {}),
+        ...(penHome != null && penAway != null ? { penH: penHome, penA: penAway } : {}),
+      };
       unlockedKeys.delete(key); // re-lock with the corrected value if it was open for editing
-      if (hasExisting) {
+      if (scoreMatches) {
+        // Silent ET-info backfill — the score didn't change, so don't report it as a correction.
+      } else if (hasExisting) {
         corrected++;
         correctedDesc.push(`${fixture.home} ${h}-${a} ${fixture.away} (was ${existingH}-${existingA})`);
       } else {

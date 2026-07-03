@@ -639,22 +639,26 @@
     overflow: hidden;
     filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
   }
+  /* Sheen sweeps a diagonal highlight across the mug. Masked to the mug's silhouette (via the
+     --mug-mask image, set in JS from the header mug src) so the shine only lands on the sticker,
+     not the transparent box around it. */
   .gwil-mug-wrap::after {
     content: '';
     position: absolute;
-    top: 0;
-    left: -100%;
-    width: 50%;
-    height: 100%;
-    background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.45) 50%, rgba(255,255,255,0) 100%);
-    transform: skewX(-15deg);
+    inset: 0;
+    background: linear-gradient(105deg, rgba(255,255,255,0) 42%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0) 58%);
+    background-size: 250% 100%;
+    background-repeat: no-repeat;
+    background-position: 150% 0;
+    -webkit-mask: var(--mug-mask, none) center / contain no-repeat;
+            mask: var(--mug-mask, none) center / contain no-repeat;
     animation: mugSheen 7s ease-in-out 3s infinite;
     pointer-events: none;
   }
   @keyframes mugSheen {
-    0%   { left: -100%; }
-    15%  { left: 110%; }
-    100% { left: 110%; }
+    0%   { background-position: 150% 0; }
+    15%  { background-position: -50% 0; }
+    100% { background-position: -50% 0; }
   }
   .header-top img.gwil-mug {
     height: 76px;
@@ -2034,6 +2038,12 @@ function getGwilMugSrc() {
   const headerMug = document.querySelector(".gwil-mug");
   return headerMug ? headerMug.src : "";
 }
+// Point the sheen mask at the mug image so the shine only lands on the sticker, not the box round it.
+(function setMugMask() {
+  const wrap = document.querySelector(".gwil-mug-wrap");
+  const mug = document.querySelector(".gwil-mug");
+  if (wrap && mug) wrap.style.setProperty("--mug-mask", `url("${mug.src}")`);
+})();
 // True while any ACTIVATED (scored, non-results-only) fixture is still missing a Nick B prediction.
 // Flips to false automatically the moment his last outstanding prediction is added.
 function nickBAwaitingPredictions() {

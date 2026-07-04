@@ -792,7 +792,7 @@
   #gwil-splash {
     position: fixed; inset: 0; z-index: 99999; background: #1a2b49;
     display: flex; align-items: center; justify-content: center;
-    animation: gwilSplashOut 0.5s ease-in 2.0s forwards;
+    animation: gwilSplashOut 0.3s ease-out 2.0s forwards;
   }
   #gwil-splash img {
     width: min(62vw, 300px); height: auto;
@@ -800,6 +800,9 @@
     animation: gwilMugIn 0.55s cubic-bezier(.2,.9,.3,1.3) both;
   }
   @keyframes gwilMugIn { from { opacity: 0; transform: scale(0.72) translateY(14px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+  /* Quick opacity fade-out. NB: a SLOW cross-fade of the navy overlay over the navy page header shows
+     a darker-navy "box" mid-fade (same-colour overlap); keeping it fast + ease-out makes that a
+     barely-perceptible flash rather than a lingering box. */
   @keyframes gwilSplashOut { to { opacity: 0; visibility: hidden; } }
   #gwil-splash .splash-caption {
     position: absolute; bottom: 15%; left: 0; right: 0; text-align: center;
@@ -820,6 +823,9 @@
   #gwil-splash.goal-celebrate .splash-caption {
     font-size: 21px; font-weight: 700; letter-spacing: 0.3px;
   }
+  /* Goal splash lingers a bit longer than load/tap splashes so the celebration lands (JS removal
+     timeout in playGwilSplash is bumped to match: 3600ms = 3.25s hold + 0.3s fade). */
+  #gwil-splash.goal-celebrate { animation: gwilSplashOut 0.3s ease-out 3.25s forwards; }
   @media (prefers-reduced-motion: reduce) { #gwil-splash { display: none !important; } }
 </style>
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "c3facaaba735463097b2a1ce8cc4eb46"}'></script><!-- End Cloudflare Web Analytics -->
@@ -2127,7 +2133,7 @@ function playGwilSplash(caption, celebrate) {
   el.setAttribute("aria-hidden", "true");
   el.innerHTML = `<img src="${src}" alt="">` + (caption ? `<div class="splash-caption">${caption}</div>` : "");
   document.body.appendChild(el);
-  setTimeout(() => { el.parentNode && el.parentNode.removeChild(el); }, 2550);
+  setTimeout(() => { el.parentNode && el.parentNode.removeChild(el); }, celebrate ? 3600 : 2350);
 }
 
 // Easter egg: tap Gwil's header mug for a full-screen Gwil moment. The line is picked fresh each

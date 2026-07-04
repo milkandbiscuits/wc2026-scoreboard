@@ -36,9 +36,17 @@
 html { -webkit-text-size-adjust: 100%; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--surface-alt); color: var(--text); min-height: 100vh; }
 
-header { background: var(--navy); color: #fff; padding: 14px 20px; position: sticky; top: 0; z-index: 10; }
+header { background: var(--navy); color: #fff; padding: 14px 20px; }
 header h1 { font-size: 17px; font-weight: 600; }
 header p { font-size: 12px; color: #c7d0e0; margin-top: 2px; }
+
+/* Sticky top: header + a slim "confidence used" tracker that stays in view while scrolling */
+.topbar { position: sticky; top: 0; z-index: 10; }
+.conf-tracker {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 7px 14px; display: flex; align-items: center; gap: 10px;
+}
+.conf-tracker .tracker-label { font-size: 11px; font-weight: 600; color: var(--text-muted); flex-shrink: 0; }
 
 .container { max-width: 540px; margin: 0 auto; padding: 14px 14px 100px; }
 
@@ -56,9 +64,9 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 .instructions { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
 .instructions strong { color: var(--text); font-weight: 500; }
 
-.used-stakes { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.used-stakes { display: flex; flex-wrap: wrap; gap: 4px; }
 .stake-pip {
-  width: 28px; height: 28px; border-radius: 50%;
+  width: 26px; height: 26px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 600;
   border: 1.5px solid var(--border-strong);
@@ -186,10 +194,16 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 </head>
 <body>
 
-<header>
-  <h1>WC 2026 · Round of 16</h1>
-  <p id="deadline">Predictions needed by…</p>
-</header>
+<div class="topbar">
+  <header>
+    <h1>WC 2026 · Round of 16</h1>
+    <p id="deadline">Predictions needed by…</p>
+  </header>
+  <div class="conf-tracker">
+    <span class="tracker-label">Confidence used</span>
+    <div class="used-stakes" id="used-stakes"></div>
+  </div>
+</div>
 
 <div class="container" id="form-container">
 
@@ -219,7 +233,6 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
       </label>
     </div>
     <p class="import-note">Fill in the template, then import it to populate the form</p>
-    <div class="used-stakes" id="used-stakes"></div>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
     <div class="progress-label" id="progress-label">0 of 8 fixtures filled in</div>
   </div>
@@ -258,8 +271,8 @@ const FIXTURES = [
   ["Mexico", "England"],
   ["Portugal", "Spain"],
   ["USA", "Belgium"],
-  [["Argentina", "Cape Verde"], "Egypt"],
-  ["Switzerland", ["Colombia", "Ghana"]]
+  ["Argentina", "Egypt"],
+  ["Switzerland", "Colombia"]
 ];
 const N = FIXTURES.length;
 

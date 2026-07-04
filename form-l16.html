@@ -571,6 +571,11 @@ async function handleSubmit() {
       body: JSON.stringify(buildEmailPayload(player, preds)),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    // FormSubmit returns HTTP 200 even on failure (e.g. "form needs activation"), so we
+    // must also check its JSON success flag — otherwise a failed send would look like a
+    // success, show the "submitted" screen, and wipe the saved draft.
+    const result = await res.json().catch(() => ({}));
+    if (String(result.success) !== 'true') throw new Error(result.message || 'Submission not accepted');
     console.log('Submitted predictions for', player, preds);
     document.getElementById('form-container').style.display = 'none';
     document.querySelector('.submit-bar').style.display = 'none';

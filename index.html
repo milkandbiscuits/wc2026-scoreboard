@@ -1436,6 +1436,17 @@ const CONFIRMED_MISSED_PENALTIES = [
   { player: "Lionel Messi", total: 1 }, // besoccer.com, confirmed via screenshot 2026-06-24
 ];
 
+// Baked-in confirmed YELLOW cards (deployed, same for every viewer) -- for award picks the automatic
+// cards-relay feed is MISSING. The Marca-backed feed only returns ~100 carded players and omits many
+// marquee names, so a genuine booking (confirmed by Gwil watching the game) is logged here as a
+// cumulative per-player total, exactly like CONFIRMED_MISSED_PENALTIES above. Applied to Golden Ball /
+// Young Player picks at -5 each (BONUS_RULE_POINTS.goldenBallYellow), and DEDUPED against the auto feed
+// (see resolveCardConfirmed) so a player who later appears in BOTH isn't counted twice. Don't also
+// hand-enter the same card via the per-device manual fallback on the Bracket Picks tab.
+const CONFIRMED_YELLOW_CARDS = [
+  { player: "Michael Olise", total: 1 }, // France; booked for an argument in the R16, confirmed by Gwil 2026-07-05
+];
+
 // Group-stage matchweeks in this file are named "Matchweek N"; anything else (Round of 32, Quarter-
 // finals, Semi-finals, Final, ...) is knockout stage. No explicit "stage" field exists per fixture,
 // so this naming convention is the only signal available -- reasonable since it's the same
@@ -1719,6 +1730,20 @@ function computeBonusDeductionPoints(player) {
   };
   resolveCardAuto(ballPick, "yellowCardAutoBall", "Golden Ball pick");
   resolveCardAuto(youngPick, "yellowCardAutoYoung", "Young Player pick");
+
+  // Baked-in confirmed yellows (CONFIRMED_YELLOW_CARDS) -- covers award picks the auto feed omits.
+  // Deduped: skip if the pick already uniquely matches an auto-feed player, so we never double-count.
+  const resolveCardConfirmed = (pickName, id, pickLabel) => {
+    const matches = distinctMatchingNames(pickName, CONFIRMED_YELLOW_CARDS.map(c => c.player));
+    if (matches.length !== 1) return; // 0 = no confirmed card for this pick; >1 = ambiguous, skip
+    if (distinctMatchingNames(pickName, cardCountNames).length === 1) return; // already in the auto feed
+    const cy = CONFIRMED_YELLOW_CARDS.find(c => c.player === matches[0]);
+    if (cy && cy.total > 0) {
+      add(id, `Yellow cards — ${pickLabel}: ${cy.player} ×${cy.total}`, "hit", BONUS_RULE_POINTS.goldenBallYellow * cy.total);
+    }
+  };
+  resolveCardConfirmed(ballPick, "yellowCardConfirmedBall", "Golden Ball pick");
+  resolveCardConfirmed(youngPick, "yellowCardConfirmedYoung", "Young Player pick");
 
   const yellowCardEvents = tournamentFacts.yellowCards || [];
   yellowCardEvents.forEach((event, i) => {
@@ -3314,9 +3339,9 @@ const CATEGORY_RULE_IDS = {
   "3rd Place": ["thirdPlace"],
   "Worst Team": ["worstTeamCorrect", "worstTeamQualifies"],
   "Golden Boot": ["goldenBoot", "goldenBootGoals", "goldenBootDreamTeam", "trumpHighFiveBoot", "missedPenaltyConfirmed"],
-  "Golden Ball": ["goldenBall", "yellowCardAutoBall", "redCardAmbiguousBall"],
+  "Golden Ball": ["goldenBall", "yellowCardAutoBall", "yellowCardConfirmedBall", "redCardAmbiguousBall"],
   "Golden Glove": ["goldenGlove", "trumpHighFiveGlove"],
-  "Best Young Player": ["youngPlayer", "youngPlayerDreamTeam", "trumpHighFiveYoung", "yellowCardAutoYoung", "redCardAmbiguousYoung"],
+  "Best Young Player": ["youngPlayer", "youngPlayerDreamTeam", "trumpHighFiveYoung", "yellowCardAutoYoung", "yellowCardConfirmedYoung", "redCardAmbiguousYoung"],
   "Dark Horse": ["darkHorse"],
   "Most Goals (Group Stage)": ["mostGroupGoals"],
   "Fewest Goals (Group Stage)": ["fewestGroupGoals"],

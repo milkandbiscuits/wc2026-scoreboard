@@ -182,6 +182,17 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 .submit-error { font-size: 13px; color: var(--amber); margin: 0 0 10px; padding: 10px 12px; background: var(--bg-amber); border: 1px solid var(--amber); border-radius: 8px; display: none; line-height: 1.55; }
 .submit-error.visible { display: block; }
 .submit-error a { color: var(--accent-dark); font-weight: 600; }
+/* ── Submit-lock: the form is fully fillable before OPEN, but the Submit button is
+   disabled until then (see the OPEN const in the script). Only the banner + button
+   change while locked; all inputs stay interactive so picks can be entered & saved. ── */
+.lock-banner { display: none; background: var(--navy); color: #fff; border-radius: 12px; padding: 15px 17px; margin-bottom: 12px; font-size: 14.5px; line-height: 1.5; }
+.lock-banner strong { font-weight: 700; }
+.lock-banner .lock-when { display: block; margin-top: 4px; font-size: 13px; color: #c3d2ec; }
+#form-container.locked > .lock-banner { display: block; }
+/* While locked, the lock banner already says picks auto-save, so suppress the
+   separate save/restored notes -- one bubble, not three. They return once open. */
+#form-container.locked > .save-note,
+#form-container.locked > .restored-note { display: none !important; }
 
 .save-note {
   font-size: 12.5px; color: var(--text-muted); line-height: 1.5;
@@ -253,6 +264,8 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 </div>
 
 <div class="container" id="form-container">
+
+  <div class="lock-banner" id="lock-banner">✍️ <strong>Fill in your Quarter-final predictions now — you just can't submit them yet.</strong><span class="lock-when" id="lock-when">Submitting opens after the last Round-of-16 match.</span></div>
 
   <div class="save-note" id="save-note">💾 Your predictions will save even if you refresh or close the browser — come back on the same device to finish.</div>
   <div class="restored-note" id="restored-note">↩ Restored your saved picks — they save automatically, even if you refresh or close the browser.</div>
@@ -327,6 +340,39 @@ const STAKES = [20, 15, 10, 5];   // QF confidence values, each used exactly onc
 // 9 Jul 9pm BST = 2026-07-09T20:00Z; 5h earlier = 4pm BST). Update each round.
 const FIRST_KO = new Date('2026-07-09T20:00:00Z');
 const DEADLINE = new Date(FIRST_KO.getTime() - 5 * 60 * 60 * 1000);
+
+// The form is always fillable, but SUBMITTING is locked until OPEN (then submittable up
+// to the deadline). OPEN = Wed 8 Jul 08:00 BST (07:00Z) -- soon after the last Round-of-16
+// match (Switzerland v Colombia, KO Tue 7 Jul 20:00 BST), so the full QF bracket is known.
+// Picks entered before OPEN save to the draft as normal. UPDATE each round alongside
+// FIXTURES/FIRST_KO. A left-open tab auto-unlocks Submit at OPEN (poll below) with no reload.
+const OPEN = new Date('2026-07-08T07:00:00Z');
+const isLocked = () => new Date() < OPEN;
+
+// "8am Wed 8 Jul" in UK time -- shared by the deadline text and the lock messaging so
+// everyone reads the same wall-clock time regardless of their device timezone.
+function bstLabel(date) {
+  const p = {};
+  new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(date).forEach(x => p[x.type] = x.value);
+  let h = parseInt(p.hour, 10);
+  const ampm = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  const time = p.minute === '00' ? `${h}${ampm}` : `${h}:${p.minute}${ampm}`;
+  return `${time} ${p.weekday} ${p.day} ${p.month}`;
+}
+const OPEN_LABEL = bstLabel(OPEN);
+
+// Show the "fill now, submit later" banner + spell out when Submit opens.
+function applyLockState() {
+  const locked = isLocked();
+  document.getElementById('form-container').classList.toggle('locked', locked);
+  const lw = document.getElementById('lock-when');
+  if (lw) lw.textContent = `Submitting opens ${OPEN_LABEL}, soon after the last Round-of-16 match. Your picks save automatically until then.`;
+  return locked;
+}
 function renderDeadline() {
   const el = document.getElementById('deadline');
   if (!el) return;
@@ -507,11 +553,16 @@ function validate() {
   const player = document.getElementById('player-select').value;
   const allGood = filled === N && !hasDups && player;
   const btn = document.getElementById('submit-btn');
-  btn.disabled = !allGood;
-  btn.textContent = !player ? 'Select your name to submit'
-    : hasDups ? 'Fix duplicate stakes to submit'
-    : filled < N ? `${N - filled} fixture${N - filled > 1 ? 's' : ''} still to fill in`
-    : 'Submit predictions';
+  if (isLocked()) {                       // pre-open: fillable, but Submit is disabled
+    btn.disabled = true;
+    btn.textContent = `🔒 Submit opens ${OPEN_LABEL}`;
+  } else {
+    btn.disabled = !allGood;
+    btn.textContent = !player ? 'Select your name to submit'
+      : hasDups ? 'Fix duplicate stakes to submit'
+      : filled < N ? `${N - filled} fixture${N - filled > 1 ? 's' : ''} still to fill in`
+      : 'Submit predictions';
+  }
 
   saveDraft();
 }
@@ -637,6 +688,7 @@ function buildEmailPayload(player, preds) {
 }
 
 async function handleSubmit() {
+  if (isLocked()) { applyLockState(); validate(); return; }  // guard: never submit before OPEN
   const player = document.getElementById('player-select').value;
   if (!player) return;
   const preds = collectPreds();
@@ -681,6 +733,13 @@ async function handleSubmit() {
 }
 
 renderDeadline();
+applyLockState();
+// Auto-unlock a left-open tab the moment OPEN passes — no manual reload needed.
+if (isLocked()) {
+  const lockPoll = setInterval(() => {
+    if (!isLocked()) { applyLockState(); validate(); clearInterval(lockPoll); }
+  }, 15000);
+}
 buildList();
 const draftRestored = loadDraft();
 validate();

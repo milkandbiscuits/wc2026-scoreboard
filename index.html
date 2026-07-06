@@ -109,6 +109,27 @@
     font-weight: 400;
     color: #666;
   }
+  /* QF prediction-form call-to-action pill in the leaderboard header. Uses a named
+     tab target (wc-qf-form) so repeated clicks re-focus/reload the ONE form tab
+     rather than stacking duplicate tabs (which would let the localStorage draft get
+     clobbered by whichever tab saved last). */
+  .lb-head-left { display: inline-flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  a.qf-form-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--green);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 7px 14px;
+    border-radius: 999px;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+  a.qf-form-link:hover { background: #176d30; }
+  a.qf-form-link:active { background: #135e29; }
   table.leaderboard {
     width: 100%;
     border-collapse: collapse;
@@ -883,8 +904,10 @@
 
   <div class="card" id="leaderboard-card">
     <div class="card-title">
-      Leaderboard
-      <span class="meta" id="leaderboard-meta"></span>
+      <span class="lb-head-left">Leaderboard
+        <span class="meta" id="leaderboard-meta"></span>
+      </span>
+      <a class="qf-form-link" href="form-qf.html" target="wc-qf-form" rel="noopener">📝 Enter QF Predictions ↗</a>
     </div>
     <table class="leaderboard" id="leaderboard-table">
       <thead><tr id="leaderboard-head"></tr></thead>
@@ -1010,10 +1033,10 @@ DATA.matchweeks.push({
     { home: "Canada", away: "Morocco", actual: null, predictions: {"Fred + Teilo":{"h":1,"a":2,"stake":6},"Rhodri B":{"h":0,"a":2,"stake":7},"Rhodri W":{"h":1,"a":3,"stake":6},"Llion":{"h":0,"a":2,"stake":6},"Nick B":{"h":1,"a":2,"stake":3},"Ant":{"h":1,"a":2,"stake":3},"Lane":{"h":0,"a":2,"stake":6},"Gwil":{"h":0,"a":1,"stake":6},"Matt":{"h":1,"a":2,"stake":6},"Liam B":{"h":1,"a":3,"stake":6},"Gaz T":{"h":1,"a":2,"stake":3},"Guto":{"h":1,"a":3,"stake":6},"Gaz E":{"h":1,"a":2,"stake":4},"Trystan H":{"h":0,"a":2,"stake":5},"Nick S":{"h":1,"a":2,"stake":5},"Dan D":{"h":1,"a":2,"stake":6},"🤖":{"h":1,"a":2,"stake":5}}, kickoff: "2026-07-04T17:00:00Z" },
     { home: "Brazil", away: "Norway", actual: null, predictions: {"Fred + Teilo":{"h":3,"a":2,"stake":4},"Rhodri B":{"h":1,"a":1,"stake":2},"Rhodri W":{"h":3,"a":2,"stake":4},"Llion":{"h":2,"a":2,"stake":2},"Nick B":{"h":2,"a":3,"stake":1},"Ant":{"h":2,"a":1,"stake":5},"Lane":{"h":2,"a":1,"stake":4},"Gwil":{"h":1,"a":1,"stake":2},"Matt":{"h":3,"a":2,"stake":5},"Liam B":{"h":2,"a":1,"stake":2},"Gaz T":{"h":2,"a":1,"stake":5},"Guto":{"h":2,"a":2,"stake":1},"Gaz E":{"h":3,"a":1,"stake":5},"Trystan H":{"h":2,"a":1,"stake":2},"Nick S":{"h":3,"a":2,"stake":4},"Dan D":{"h":2,"a":2,"stake":1},"🤖":{"h":3,"a":1,"stake":6}}, kickoff: "2026-07-05T19:00:00Z" },
     { home: "Mexico", away: "England", actual: null, predictions: {"Fred + Teilo":{"h":1,"a":2,"stake":3},"Rhodri B":{"h":1,"a":2,"stake":3},"Rhodri W":{"h":1,"a":2,"stake":3},"Llion":{"h":1,"a":2,"stake":3},"Nick B":{"h":2,"a":1,"stake":2},"Ant":{"h":1,"a":1,"stake":2},"Lane":{"h":1,"a":1,"stake":3},"Gwil":{"h":1,"a":2,"stake":4},"Matt":{"h":1,"a":2,"stake":2},"Liam B":{"h":2,"a":2,"stake":1},"Gaz T":{"h":1,"a":0,"stake":1},"Guto":{"h":2,"a":1,"stake":2},"Gaz E":{"h":2,"a":1,"stake":3},"Trystan H":{"h":1,"a":2,"stake":1},"Nick S":{"h":2,"a":1,"stake":3},"Dan D":{"h":1,"a":1,"stake":3},"🤖":{"h":2,"a":2,"stake":2}}, kickoff: "2026-07-06T00:00:00Z" },
-    { home: "Portugal", away: "Spain", actual: null, predictions: {"Fred + Teilo":{"h":1,"a":3,"stake":5},"Rhodri B":{"h":1,"a":3,"stake":6},"Rhodri W":{"h":0,"a":2,"stake":5},"Llion":{"h":0,"a":2,"stake":5},"Nick B":{"h":1,"a":3,"stake":5},"Ant":{"h":2,"a":2,"stake":1},"Lane":{"h":1,"a":2,"stake":5},"Gwil":{"h":2,"a":1,"stake":3},"Matt":{"h":1,"a":2,"stake":4},"Liam B":{"h":1,"a":2,"stake":5},"Gaz T":{"h":2,"a":3,"stake":4},"Guto":{"h":1,"a":2,"stake":3},"Gaz E":{"h":0,"a":1,"stake":7},"Trystan H":{"h":1,"a":2,"stake":3},"Nick S":{"h":1,"a":2,"stake":1},"Dan D":{"h":1,"a":2,"stake":5},"🤖":{"h":0,"a":1,"stake":4}}, kickoff: "2026-07-06T18:00:00Z" },
-    { home: "United States", away: "Belgium", actual: null, predictions: {"Fred + Teilo":{"h":1,"a":1,"stake":1},"Rhodri B":{"h":1,"a":1,"stake":1},"Rhodri W":{"h":1,"a":2,"stake":1},"Llion":{"h":2,"a":1,"stake":4},"Nick B":{"h":2,"a":0,"stake":4},"Ant":{"h":2,"a":0,"stake":6},"Lane":{"h":1,"a":1,"stake":1},"Gwil":{"h":3,"a":1,"stake":5},"Matt":{"h":2,"a":1,"stake":1},"Liam B":{"h":1,"a":2,"stake":4},"Gaz T":{"h":1,"a":2,"stake":2},"Guto":{"h":1,"a":2,"stake":4},"Gaz E":{"h":2,"a":2,"stake":1},"Trystan H":{"h":1,"a":3,"stake":6},"Nick S":{"h":2,"a":1,"stake":6},"Dan D":{"h":2,"a":3,"stake":2},"🤖":{"h":2,"a":1,"stake":3}}, kickoff: "2026-07-06T23:00:00Z" },
+    { home: "Portugal", away: "Spain", actual: null, predictions: {"Fred + Teilo":{"h":1,"a":3,"stake":5},"Rhodri B":{"h":1,"a":3,"stake":6},"Rhodri W":{"h":0,"a":2,"stake":5},"Llion":{"h":0,"a":2,"stake":5},"Nick B":{"h":1,"a":3,"stake":5},"Ant":{"h":2,"a":2,"stake":1},"Lane":{"h":1,"a":2,"stake":5},"Gwil":{"h":2,"a":1,"stake":3},"Matt":{"h":1,"a":2,"stake":4},"Liam B":{"h":1,"a":2,"stake":5},"Gaz T":{"h":2,"a":3,"stake":4},"Guto":{"h":1,"a":2,"stake":3},"Gaz E":{"h":0,"a":1,"stake":7},"Trystan H":{"h":1,"a":2,"stake":3},"Nick S":{"h":1,"a":2,"stake":1},"Dan D":{"h":1,"a":2,"stake":5},"🤖":{"h":0,"a":1,"stake":4}}, kickoff: "2026-07-06T19:00:00Z" },
+    { home: "United States", away: "Belgium", actual: null, predictions: {"Fred + Teilo":{"h":1,"a":1,"stake":1},"Rhodri B":{"h":1,"a":1,"stake":1},"Rhodri W":{"h":1,"a":2,"stake":1},"Llion":{"h":2,"a":1,"stake":4},"Nick B":{"h":2,"a":0,"stake":4},"Ant":{"h":2,"a":0,"stake":6},"Lane":{"h":1,"a":1,"stake":1},"Gwil":{"h":3,"a":1,"stake":5},"Matt":{"h":2,"a":1,"stake":1},"Liam B":{"h":1,"a":2,"stake":4},"Gaz T":{"h":1,"a":2,"stake":2},"Guto":{"h":1,"a":2,"stake":4},"Gaz E":{"h":2,"a":2,"stake":1},"Trystan H":{"h":1,"a":3,"stake":6},"Nick S":{"h":2,"a":1,"stake":6},"Dan D":{"h":2,"a":3,"stake":2},"🤖":{"h":2,"a":1,"stake":3}}, kickoff: "2026-07-07T00:00:00Z" },
     { home: "Argentina", away: "Egypt", actual: null, predictions: {"Fred + Teilo":{"h":2,"a":0,"stake":8},"Rhodri B":{"h":2,"a":1,"stake":5},"Rhodri W":{"h":3,"a":1,"stake":7},"Llion":{"h":3,"a":0,"stake":7},"Nick B":{"h":3,"a":1,"stake":6},"Ant":{"h":2,"a":1,"stake":4},"Lane":{"h":2,"a":0,"stake":7},"Gwil":{"h":2,"a":0,"stake":7},"Matt":{"h":3,"a":1,"stake":7},"Liam B":{"h":3,"a":1,"stake":7},"Gaz T":{"h":2,"a":0,"stake":7},"Guto":{"h":3,"a":1,"stake":7},"Gaz E":{"h":3,"a":1,"stake":6},"Trystan H":{"h":3,"a":0,"stake":7},"Nick S":{"h":3,"a":1,"stake":7},"Dan D":{"h":2,"a":0,"stake":7},"🤖":{"h":2,"a":0,"stake":7}}, kickoff: "2026-07-07T16:00:00Z" },
-    { home: "Switzerland", away: "Colombia", actual: null, predictions: {"Fred + Teilo":{"h":2,"a":1,"stake":2},"Rhodri B":{"h":2,"a":0,"stake":4},"Rhodri W":{"h":1,"a":2,"stake":2},"Llion":{"h":1,"a":2,"stake":1},"Nick B":{"h":0,"a":3,"stake":7},"Ant":{"h":0,"a":2,"stake":7},"Lane":{"h":1,"a":1,"stake":2},"Gwil":{"h":1,"a":0,"stake":1},"Matt":{"h":1,"a":2,"stake":3},"Liam B":{"h":1,"a":2,"stake":3},"Gaz T":{"h":0,"a":1,"stake":6},"Guto":{"h":0,"a":2,"stake":5},"Gaz E":{"h":1,"a":1,"stake":2},"Trystan H":{"h":2,"a":1,"stake":4},"Nick S":{"h":1,"a":2,"stake":2},"Dan D":{"h":1,"a":2,"stake":4},"🤖":{"h":0,"a":1,"stake":1}}, kickoff: "2026-07-07T19:00:00Z" },
+    { home: "Switzerland", away: "Colombia", actual: null, predictions: {"Fred + Teilo":{"h":2,"a":1,"stake":2},"Rhodri B":{"h":2,"a":0,"stake":4},"Rhodri W":{"h":1,"a":2,"stake":2},"Llion":{"h":1,"a":2,"stake":1},"Nick B":{"h":0,"a":3,"stake":7},"Ant":{"h":0,"a":2,"stake":7},"Lane":{"h":1,"a":1,"stake":2},"Gwil":{"h":1,"a":0,"stake":1},"Matt":{"h":1,"a":2,"stake":3},"Liam B":{"h":1,"a":2,"stake":3},"Gaz T":{"h":0,"a":1,"stake":6},"Guto":{"h":0,"a":2,"stake":5},"Gaz E":{"h":1,"a":1,"stake":2},"Trystan H":{"h":2,"a":1,"stake":4},"Nick S":{"h":1,"a":2,"stake":2},"Dan D":{"h":1,"a":2,"stake":4},"🤖":{"h":0,"a":1,"stake":1}}, kickoff: "2026-07-07T20:00:00Z" },
   ],
 });
 DATA.matchweeks.push({

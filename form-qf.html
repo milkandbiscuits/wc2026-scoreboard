@@ -193,6 +193,12 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
    separate save/restored notes -- one bubble, not three. They return once open. */
 #form-container.locked > .save-note,
 #form-container.locked > .restored-note { display: none !important; }
+/* Multi-tab warning: shown when this form is open in another tab of the SAME browser.
+   Those tabs share one localStorage draft with no live sync, so editing both can
+   overwrite picks. Driven by a BroadcastChannel heartbeat (see the script). */
+.multitab-banner { display: none; background: var(--bg-amber); color: #7c4a03; border: 1px solid var(--amber); border-left: 4px solid var(--amber); border-radius: 12px; padding: 12px 15px; margin-bottom: 12px; font-size: 13.5px; line-height: 1.5; }
+.multitab-banner strong { font-weight: 700; }
+.multitab-banner.visible { display: block; }
 
 .save-note {
   font-size: 12.5px; color: var(--text-muted); line-height: 1.5;
@@ -266,6 +272,8 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 <div class="container" id="form-container">
 
   <div class="lock-banner" id="lock-banner">✍️ <strong>Fill in your Quarter-final predictions now — you just can't submit them yet.</strong><span class="lock-when" id="lock-when">Submitting opens after the last Round-of-16 match.</span></div>
+
+  <div class="multitab-banner" id="multitab-banner">⚠️ <strong>This form is open in another tab.</strong> Finish and submit in just one — editing it in two tabs at once can overwrite your picks.</div>
 
   <div class="save-note" id="save-note">💾 Your predictions will save even if you refresh or close the browser — come back on the same device to finish.</div>
   <div class="restored-note" id="restored-note">↩ Restored your saved picks — they save automatically, even if you refresh or close the browser.</div>
@@ -744,6 +752,39 @@ buildList();
 const draftRestored = loadDraft();
 validate();
 if (draftRestored) showRestoredNote();
+
+// ── Multi-tab guard ──────────────────────────────────────────────────────────
+// Warn when this form is open in more than one tab of the SAME browser. Such tabs
+// share one localStorage draft with no live sync, so editing both can overwrite
+// picks (last writer wins). A BroadcastChannel heartbeat tracks live sibling tabs;
+// the amber banner shows while ≥1 other is open and clears when they close. Only
+// covers the same browser -- a different browser or WhatsApp's in-app browser has
+// its own separate storage and can't be detected. Old browsers without
+// BroadcastChannel just skip the warning (no error, form works as normal).
+(function multiTabGuard() {
+  if (typeof BroadcastChannel === 'undefined') return;
+  const bc = new BroadcastChannel('wc26-qf-tabs');
+  const myId = Math.random().toString(36).slice(2) + Date.now();
+  const peers = new Map();                     // peerId -> last-seen ms
+  const STALE = 7000, BEAT = 2500;
+  const banner = document.getElementById('multitab-banner');
+  function refresh() {
+    const now = Date.now();
+    for (const [id, seen] of peers) if (now - seen > STALE) peers.delete(id);
+    if (banner) banner.classList.toggle('visible', peers.size > 0);
+  }
+  bc.onmessage = (e) => {
+    const m = e.data;
+    if (!m || m.from === myId) return;
+    if (m.type === 'bye') { peers.delete(m.from); refresh(); return; }
+    peers.set(m.from, Date.now());              // hello or beat = this tab is alive
+    if (m.type === 'hello') bc.postMessage({ type: 'beat', from: myId });  // announce back
+    refresh();
+  };
+  bc.postMessage({ type: 'hello', from: myId }); // ask who else is here
+  setInterval(() => { bc.postMessage({ type: 'beat', from: myId }); refresh(); }, BEAT);
+  window.addEventListener('pagehide', () => { try { bc.postMessage({ type: 'bye', from: myId }); } catch (e) {} });
+})();
 
 function downloadTemplate() {
   if (typeof XLSX === 'undefined') { alert('Still loading — try again in a moment'); return; }

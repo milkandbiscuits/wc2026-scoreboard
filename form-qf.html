@@ -33,8 +33,13 @@
     --bg-green: #14532d; --bg-red: #450a0a; --bg-amber: #451a03;
   }
 }
-html { -webkit-text-size-adjust: 100%; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--surface-alt); color: var(--text); min-height: 100vh; }
+/* Lock horizontal movement: iOS Safari rubber-bands sideways during vertical scroll
+   even with no over-wide element. overflow-x:clip stops any horizontal scroll WITHOUT
+   breaking the sticky header (unlike overflow-x:hidden, which would); overscroll-
+   behavior-x:none kills the sideways bounce. The plain `hidden` is a fallback for
+   iOS < 16 (which ignores `clip`); modern browsers use the `clip` line. */
+html { -webkit-text-size-adjust: 100%; overflow-x: hidden; overflow-x: clip; overscroll-behavior-x: none; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--surface-alt); color: var(--text); min-height: 100vh; max-width: 100%; overflow-x: hidden; overflow-x: clip; overscroll-behavior-x: none; }
 
 header { background: var(--navy); color: #fff; padding: 14px 20px; }
 header h1 { font-size: 17px; font-weight: 600; }

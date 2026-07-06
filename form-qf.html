@@ -84,7 +84,7 @@ header img.gwil-mug { height: 50px; width: auto; display: block; }
 }
 .conf-tracker .tracker-label { font-size: 11px; font-weight: 600; color: var(--text-muted); flex-shrink: 0; }
 
-.container { max-width: 540px; margin: 0 auto; padding: 14px 14px 100px; }
+.container { max-width: 540px; margin: 0 auto; padding: 14px 14px 20px; }
 
 .card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
 
@@ -225,8 +225,13 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 .import-note { font-size: 11px; color: var(--text-light); margin-top: 6px; text-align: center; }
 
 .submit-bar {
-  position: fixed; bottom: 0; left: 0; right: 0;
-  padding: 12px 16px 28px; background: var(--surface);
+  /* In normal document flow — NOT position:fixed. A fixed bottom bar floats up over
+     the content when the iOS keyboard opens (visual- vs layout-viewport mismatch that
+     no JS hack reliably tames across iOS versions — it kept double-compensating and
+     stranding the buttons mid-screen). Static = zero viewport math, never overlaps
+     the keyboard. env() adds the home-indicator gap the old fixed bar used to hold. */
+  padding: 16px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
   border-top: 1px solid var(--border);
 }
 .submit-bar button {
@@ -864,24 +869,9 @@ function importExcel(input) {
   reader.readAsArrayBuffer(file);
 }
 
-// Keep the fixed submit bar glued to the BOTTOM on mobile. iOS Safari pins position:fixed
-// to the layout viewport, so when the on-screen keyboard opens (tapping a score box) — or
-// the URL bar shows/hides — the bar floats up into the middle of the screen. The
-// VisualViewport API tells us the real visible area; we translate the bar down to match so
-// it always hugs the true bottom. No-ops on browsers without the API (they keep the old
-// behaviour) and when nothing is covering the viewport (offset 0 → no transform).
-(function pinSubmitBar() {
-  const bar = document.querySelector('.submit-bar');
-  const vv = window.visualViewport;
-  if (!bar || !vv) return;
-  function reposition() {
-    const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-    bar.style.transform = offset > 1 ? `translateY(-${offset}px)` : '';
-  }
-  vv.addEventListener('resize', reposition);
-  vv.addEventListener('scroll', reposition);
-  reposition();
-})();
+// (The submit bar is now in normal flow — see .submit-bar CSS — so the old
+// VisualViewport "pin to bottom" hack was removed; it was double-compensating on
+// newer iOS and stranding the buttons mid-screen over the keyboard.)
 
 // Point the sheen mask at the mug image so the shine only lands on Gwil, not the box round him.
 (function setMugMask() {

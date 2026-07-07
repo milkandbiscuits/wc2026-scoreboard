@@ -348,8 +348,8 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 const FIXTURES = [
   ["France", "Morocco"],
   ["Norway", "England"],
-  ["Spain", ["USA", "Belgium"]],
-  [["Argentina", "Egypt"], ["Switzerland", "Colombia"]]
+  ["Spain", "Belgium"],
+  ["Argentina", "Switzerland"]
 ];
 const N = FIXTURES.length;
 const STAKES = [20, 15, 10, 5];   // QF confidence values, each used exactly once (high → low)
@@ -364,7 +364,7 @@ const DEADLINE = new Date(FIRST_KO.getTime() - 5 * 60 * 60 * 1000);
 // match (Switzerland v Colombia, KO Tue 7 Jul 20:00 BST), so the full QF bracket is known.
 // Picks entered before OPEN save to the draft as normal. UPDATE each round alongside
 // FIXTURES/FIRST_KO. A left-open tab auto-unlocks Submit at OPEN (poll below) with no reload.
-const OPEN = new Date('2026-07-08T07:00:00Z');
+const OPEN = new Date('2026-07-07T22:00:00Z');
 const isLocked = () => new Date() < OPEN;
 
 // "8am Wed 8 Jul" in UK time -- shared by the deadline text and the lock messaging so

@@ -377,7 +377,21 @@
   .pts-line.wrong { color: var(--red); }
   .pts-line.pending { color: #888; font-weight: 500; }
   .pts-line.exact { color: #9a6b00; }
+  .pts-line.q-zero { color: #999; font-weight: 600; }
   .exact-star { font-size: 16px; line-height: 1; vertical-align: middle; }
+  /* Semi-final "5 questions" cells: winner pick + 4 numbers (corners/cards/shots/added),
+     each shaded green when it exactly matches once the result is in. */
+  td.player-cell.qmode { line-height: 1.25; }
+  .q-qualify { font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap; }
+  .q-nums { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin: 2px 0; }
+  .q-num { font-size: 10px; font-weight: 600; color: #667; background: #f1f3f4; border-radius: 4px; padding: 1px 4px; }
+  .q-hit { color: var(--green) !important; background: var(--green-bg); border-radius: 4px; padding: 0 3px; }
+  .q-miss { color: #b0b0b0; }
+  .q-actual { font-size: 11px; line-height: 1.3; text-align: center; }
+  .q-actual-score { font-weight: 700; }
+  .q-actual .q-win { color: var(--green); font-weight: 700; }
+  .q-actual-stats { font-size: 10px; color: #777; }
+  .q-actual.q-await { color: #999; font-style: italic; }
   .half-badge { font-size: 11px; line-height: 1; position: relative; top: -1px; color: #4caf77; opacity: 0.85; }
   .mw-leader-box {
     display: inline-block;
@@ -936,6 +950,12 @@
       <div><span class="mw-leader-box" style="padding:1px 8px;">+5</span> = won the week, Gwil's +5 bonus included (only once every game that week is done; ties broken by most exact scores, then points without doubling)</div>
       <div><span class="mw-live-lead-box" style="padding:0 7px;">±0</span> = currently out in front this week (no bonus yet — fills solid green once the week's done)</div>
     </div>
+    <div class="legend" id="sf-legend" style="display:none;">
+      <div><strong>Semi-finals — Gwil's 5 questions:</strong> each answer is worth +5, <strong>exact match only</strong> (max +25 a game). No stakes this round.</div>
+      <div><span class="swatch" style="background:var(--green-bg);border:1px solid var(--green)"></span>Green = you nailed that answer exactly (+5)</div>
+      <div>🏆 Winner pick &nbsp;·&nbsp; <strong>CO</strong> Corners &nbsp;·&nbsp; <strong>CD</strong> Cards &nbsp;·&nbsp; <strong>ST</strong> Shots on target &nbsp;·&nbsp; <strong>AT</strong> Added time (injury minutes boarded at 90′)</div>
+      <div><span class="mw-leader-box" style="padding:1px 8px;">+5</span> = won the week (most points across both semis; locks once both are played)</div>
+    </div>
     <div class="toolbar">
       <button class="reset-btn fetch-btn js-fetch-btn">⟳ Fetch latest results</button>
       <span class="js-fetch-status" style="color:#888;"></span>
@@ -1041,12 +1061,11 @@ DATA.matchweeks.push({
 });
 DATA.matchweeks.push({
   name: "Quarter-finals",
-  resultsOnly: true,
   fixtures: [
-    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-09T20:00:00Z" },
-    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-10T19:00:00Z" },
-    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-11T21:00:00Z" },
-    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-12T01:00:00Z" },
+    { home: "France", away: "Morocco", actual: null, predictions: {"Fred + Teilo":{"h":2,"a":0,"stake":15},"Rhodri B":{"h":2,"a":1,"stake":15},"Rhodri W":{"h":2,"a":1,"stake":5},"Llion":{"h":2,"a":1,"stake":10},"Nick B":{"h":3,"a":2,"stake":10},"Lane":{"h":2,"a":1,"stake":15},"Gwil":{"h":1,"a":1,"stake":10},"Matt":{"h":2,"a":1,"stake":20},"Liam B":{"h":3,"a":1,"stake":20},"Gaz T":{"h":3,"a":1,"stake":20},"Gaz E":{"h":2,"a":0,"stake":15},"Trystan H":{"h":3,"a":1,"stake":10},"Dan D":{"h":2,"a":1,"stake":20},"🤖":{"h":1,"a":0,"stake":10},"Ant":{"h":2,"a":1,"stake":15},"Guto":{"h":3,"a":1,"stake":10},"Nick S":{"h":3,"a":2,"stake":10}}, kickoff: "2026-07-09T20:00:00Z" },
+    { home: "Spain", away: "Belgium", actual: null, predictions: {"Fred + Teilo":{"h":2,"a":0,"stake":20},"Rhodri B":{"h":2,"a":0,"stake":5},"Rhodri W":{"h":2,"a":0,"stake":15},"Llion":{"h":2,"a":0,"stake":15},"Nick B":{"h":3,"a":1,"stake":20},"Lane":{"h":2,"a":0,"stake":20},"Gwil":{"h":2,"a":0,"stake":20},"Matt":{"h":1,"a":0,"stake":10},"Liam B":{"h":3,"a":1,"stake":15},"Gaz T":{"h":2,"a":0,"stake":15},"Gaz E":{"h":1,"a":1,"stake":10},"Trystan H":{"h":2,"a":0,"stake":15},"Dan D":{"h":1,"a":0,"stake":10},"🤖":{"h":2,"a":1,"stake":15},"Ant":{"h":1,"a":1,"stake":5},"Guto":{"h":2,"a":0,"stake":15},"Nick S":{"h":3,"a":1,"stake":20}}, kickoff: "2026-07-10T19:00:00Z" },
+    { home: "Norway", away: "England", actual: null, predictions: {"Fred + Teilo":{"h":1,"a":2,"stake":5},"Rhodri B":{"h":1,"a":2,"stake":20},"Rhodri W":{"h":1,"a":3,"stake":20},"Llion":{"h":2,"a":3,"stake":5},"Nick B":{"h":2,"a":2,"stake":5},"Lane":{"h":1,"a":1,"stake":5},"Gwil":{"h":1,"a":3,"stake":15},"Matt":{"h":1,"a":2,"stake":15},"Liam B":{"h":1,"a":2,"stake":5},"Gaz T":{"h":1,"a":2,"stake":5},"Gaz E":{"h":2,"a":1,"stake":5},"Trystan H":{"h":2,"a":1,"stake":5},"Dan D":{"h":2,"a":2,"stake":5},"🤖":{"h":1,"a":2,"stake":5},"Ant":{"h":1,"a":2,"stake":10},"Guto":{"h":2,"a":1,"stake":5},"Nick S":{"h":2,"a":2,"stake":5}}, kickoff: "2026-07-11T21:00:00Z" },
+    { home: "Argentina", away: "Switzerland", actual: null, predictions: {"Fred + Teilo":{"h":2,"a":0,"stake":10},"Rhodri B":{"h":2,"a":0,"stake":10},"Rhodri W":{"h":2,"a":1,"stake":10},"Llion":{"h":3,"a":1,"stake":20},"Nick B":{"h":3,"a":1,"stake":15},"Lane":{"h":1,"a":1,"stake":10},"Gwil":{"h":1,"a":2,"stake":5},"Matt":{"h":1,"a":0,"stake":5},"Liam B":{"h":2,"a":1,"stake":10},"Gaz T":{"h":2,"a":1,"stake":10},"Gaz E":{"h":3,"a":0,"stake":20},"Trystan H":{"h":3,"a":0,"stake":20},"Dan D":{"h":2,"a":0,"stake":15},"🤖":{"h":2,"a":0,"stake":20},"Ant":{"h":2,"a":1,"stake":20},"Guto":{"h":3,"a":0,"stake":20},"Nick S":{"h":2,"a":1,"stake":15}}, kickoff: "2026-07-12T01:00:00Z" },
   ],
 });
 
@@ -1064,12 +1083,36 @@ DATA.matchweeks.push({
 //
 // TO RUN PREDICTIONS on any of these instead of results-only: remove `resultsOnly: true` from that
 // fixture and give it a normal `predictions` block.
+//
+// ── SEMI-FINALS: NEW "5 QUESTIONS" GAME (mode:"questions") ───────────────────────────────────
+// The semis are the END of Gwil's predicting game and use a NEW model, not scoreline+stake. Each
+// semi has FIVE questions worth +5 pts each, EXACT MATCH ONLY (max +25/match): (1) `qualify` = which
+// team wins (matched against the actual winner from `actual{h,a}`); (2) corners, (3) cards, (4) shots
+// (on target), (5) added (injury time boarded at 90'), each matched against `actualStats`. Predictions
+// shape: { qualify:"France", corners:N, cards:N, shots:N, added:N }. Scored by gradeQuestions() via the
+// `mode:"questions"` branch in computeTotals; feeds the SF leaderboard column + total; MW-winner +5
+// bonus applies. No stakes, no Correct/Exact scoreline stats. `actual{h,a}` still records the real
+// score (winner + tournament goals); `actualStats` is Gwil-supplied (corners/cards/shots/added) and
+// baked in when he sends them after each match -- both must be present for the fixture to score.
+// KEPT `resultsOnly: true` (hidden) until ACTIVATED: fill real teams (once QFs finish), remove
+// resultsOnly at matchweek + fixture level, ingest predictions (PDF Import-JSON, same as QF). Hold the
+// push until all 17 are in (fairness). SF times user-confirmed: both 8pm BST (Tue 14 / Wed 15 Jul).
 DATA.matchweeks.push({
-  name: "Semi-finals & Final",
+  name: "Semi-finals",
   resultsOnly: true,
   fixtures: [
-    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-14T23:00:00Z" }, // Semi-final 1
-    { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-15T23:00:00Z" }, // Semi-final 2
+    { home: "TBD", away: "TBD", mode: "questions", resultsOnly: true, actual: null, actualStats: null, predictions: {}, kickoff: "2026-07-14T19:00:00Z" }, // SF1: Tue 14 Jul, 8pm BST
+    { home: "TBD", away: "TBD", mode: "questions", resultsOnly: true, actual: null, actualStats: null, predictions: {}, kickoff: "2026-07-15T19:00:00Z" }, // SF2: Wed 15 Jul, 8pm BST
+  ],
+});
+// Final + 3rd-place: results-only forever (semis end the predicting game -- NO predictions here).
+// They exist only so their goals/cards feed the Total Tournament Goals/Cards bonuses and keep
+// TOTAL_TOURNAMENT_GAMES = 104 (72 + 16 R32 + 8 L16 + 4 QF + 2 SF + 2 here). Fill teams as the
+// bracket sets; live scores auto-fill from the API. Stay hidden (resultsOnly) throughout.
+DATA.matchweeks.push({
+  name: "Final",
+  resultsOnly: true,
+  fixtures: [
     { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-18T19:00:00Z" }, // 3rd-place play-off
     { home: "TBD", away: "TBD", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-19T19:00:00Z" }, // Final
   ],
@@ -1208,6 +1251,27 @@ function gradeFixture(pred, actual) {
   return { pts: pred.stake, correct: true, exact: false };
 }
 
+// Semi-final "5 questions" scoring (fixture.mode === "questions"). Each of the 5 answers is worth
+// +5 pts, EXACT MATCH ONLY (max +25). `qualify` (a team name) is matched against the actual winner;
+// corners/cards/shots/added against `stats` (Gwil-supplied actualStats). Returns { pts, hits } or
+// null (fixture not fully resolved OR player hasn't submitted) -> pending, mirroring gradeFixture.
+function actualWinnerTeam(actual, fixture) {
+  if (!actual) return null;
+  if (actual.h > actual.a) return fixture.home;
+  if (actual.a > actual.h) return fixture.away;
+  if (actual.aetWinner) return actual.aetWinner === "H" ? fixture.home : fixture.away; // drawn AET -> pens
+  return null; // level with no shootout winner recorded yet -> qualify not scorable
+}
+const SF_QUESTION_KEYS = ["corners", "cards", "shots", "added"];
+function gradeQuestions(pred, actual, stats, fixture) {
+  if (!actual || !stats || !pred) return null;
+  const winner = actualWinnerTeam(actual, fixture);
+  const checks = { qualify: winner != null && pred.qualify === winner };
+  SF_QUESTION_KEYS.forEach(k => { checks[k] = Number(pred[k]) === Number(stats[k]); });
+  const hits = Object.values(checks).filter(Boolean).length;
+  return { pts: hits * 5, hits, checks };
+}
+
 // Matchweek-leader bonus tie-break, in order: (1) highest matchweek points (doubled scores count),
 // (2) most exact/correct scores that matchweek, (3) highest matchweek points if exact scores were
 // NOT doubled. Anyone still tied after all three levels shares the bonus.
@@ -1252,6 +1316,23 @@ function computeTotals(excludeKey, onlyKeys, excludeKeys) {
       // the Total Goals/Cards totals. Skip them entirely here: no grading, and they don't gate the
       // matchweek-winner bonus (anyResolved/allResolved track scored fixtures only).
       if (fixture.resultsOnly) return;
+      // Semi-final "5 questions" fixtures score via gradeQuestions (+5 per exact answer), not the
+      // scoreline engine. They need BOTH the score (getActual, for the winner) and actualStats
+      // (Gwil-supplied) to resolve; they feed byMw + the MW-winner bonus, but not Correct/Exact/wrong.
+      if (fixture.mode === "questions") {
+        const qk = fixtureKey(mwIndex, fixIndex);
+        const qAllowed = !onlyKeys || onlyKeys.has(qk);
+        const qExcluded = qk === excludeKey || !!(excludeKeys && excludeKeys.has(qk));
+        const qActual = (qExcluded || !qAllowed) ? null : getActual(mwIndex, fixIndex, fixture);
+        const qStats = (qExcluded || !qAllowed) ? null : fixture.actualStats;
+        if (qActual && qStats) anyResolved = true; else allResolved = false;
+        DATA.players.forEach(p => {
+          const g = gradeQuestions(fixture.predictions[p], qActual, qStats, fixture);
+          if (g === null) totals[p].pending++;
+          else { totals[p].byMw[mwIndex] += g.pts; totals[p].baseByMw[mwIndex] += g.pts; }
+        });
+        return;
+      }
       const k = fixtureKey(mwIndex, fixIndex);
       const allowed = !onlyKeys || onlyKeys.has(k);
       const excluded = k === excludeKey || !!(excludeKeys && excludeKeys.has(k));
@@ -2492,7 +2573,7 @@ function matchweekShortLabel(name) {
   if (mwNum) return `MW${mwNum[1]}`;
   if (/round of 32|last 32/i.test(name)) return "L32";
   if (/round of 16|last 16/i.test(name)) return "L16";
-  if (/quarter/i.test(name)) return "Q";
+  if (/quarter/i.test(name)) return "QF";
   if (/semi/i.test(name)) return "SF";
   if (/third|3rd/i.test(name)) return "3rd";
   if (/\bfinal\b/i.test(name)) return "F";
@@ -2651,6 +2732,38 @@ function renderFixtureRow(mwIndex, fixIndex, fixture) {
       <td class="col-fixture">${fixture.home} <span style="color:#aaa;">v</span> ${fixture.away}<div class="kickoff-time">${formatKickoff(fixture.kickoff)}</div></td>
       <td class="col-actual">${renderActualCell(mwIndex, fixIndex, hVal, aVal)}</td>
       <td class="results-only-note" colspan="${DATA.players.length}">${note}</td>
+    </tr>`;
+  }
+
+  // Semi-final "5 questions" fixtures render a different cell: each player's 5 answers (winner +
+  // corners/cards/shots/added) with per-answer hit/miss shading once resolved, and +5 per exact hit.
+  // The Actual column is a read-only summary of the result + Gwil's stats (they're baked into DATA,
+  // not entered via score boxes), or "Awaiting result" until both the score and actualStats are in.
+  if (fixture.mode === "questions") {
+    const stats = fixture.actualStats;
+    const resolved = !!(actual && stats);
+    const winner = resolved ? actualWinnerTeam(actual, fixture) : null;
+    const actualCell = resolved
+      ? `<div class="q-actual"><div class="q-actual-score">${actual.h}–${actual.a}${winner ? ` <span class="q-win">${winner}</span>` : ""}</div><div class="q-actual-stats">CO${stats.corners} · CD${stats.cards} · ST${stats.shots} · AT${stats.added}</div></div>`
+      : `<div class="q-actual q-await">Awaiting result</div>`;
+    const qCells = DATA.players.map(p => {
+      const pred = fixture.predictions[p];
+      if (!pred) return `<td class="player-cell no-pred"><div class="pred-line">–</div></td>`;
+      const g = gradeQuestions(pred, resolved ? actual : null, resolved ? stats : null, fixture);
+      const hit = k => (g && g.checks[k]) ? " q-hit" : (resolved ? " q-miss" : "");
+      const ptsHtml = g === null
+        ? `<div class="pts-line pending">(–)</div>`
+        : `<div class="pts-line ${g.pts > 0 ? "correct" : "q-zero"}">+${g.pts}</div>`;
+      return `<td class="player-cell qmode">
+        <div class="q-qualify${hit("qualify")}" title="Winner pick">🏆 ${pred.qualify}</div>
+        <div class="q-nums"><span class="q-num${hit("corners")}" title="Corners">CO${pred.corners}</span><span class="q-num${hit("cards")}" title="Cards">CD${pred.cards}</span><span class="q-num${hit("shots")}" title="Shots on target">ST${pred.shots}</span><span class="q-num${hit("added")}" title="Added time (injury minutes boarded at 90')">AT${pred.added}</span></div>
+        ${ptsHtml}
+      </td>`;
+    }).join("");
+    return `<tr>
+      <td class="col-fixture">${fixture.home} <span style="color:#aaa;">v</span> ${fixture.away}<div class="kickoff-time">${formatKickoff(fixture.kickoff)}</div></td>
+      <td class="col-actual">${actualCell}</td>
+      ${qCells}
     </tr>`;
   }
 
@@ -3639,7 +3752,13 @@ function renderPanels() {
   panels.querySelectorAll(".table-scroll").forEach(el => el.offsetHeight);
 
   // The colour legend only means anything on the scored matchweek tables, not the reference tabs.
-  document.getElementById("legend").style.display = (activeTab === "bracket" || activeTab === "rules") ? "none" : "flex";
+  // Legend: hide both on the Bonus Rules / Bracket Picks tabs. On a questions-mode matchweek (the
+  // semis) show the SF legend instead of the scoreline one, since stakes/half-points don't apply there.
+  const onMetaTab = (activeTab === "bracket" || activeTab === "rules");
+  const activeMwIsQuestions = typeof activeTab === "number" && DATA.matchweeks[activeTab] && DATA.matchweeks[activeTab].fixtures.some(f => f.mode === "questions");
+  document.getElementById("legend").style.display = (onMetaTab || activeMwIsQuestions) ? "none" : "flex";
+  const sfLeg = document.getElementById("sf-legend");
+  if (sfLeg) sfLeg.style.display = (!onMetaTab && activeMwIsQuestions) ? "flex" : "none";
 
   tabs.querySelectorAll(".tab-btn").forEach(btn => {
     btn.addEventListener("click", () => {

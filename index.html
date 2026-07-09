@@ -109,17 +109,16 @@
     font-weight: 400;
     color: #666;
   }
-  /* QF prediction-form call-to-action pill in the leaderboard header. Uses a named
-     tab target (wc-qf-form) so repeated clicks re-focus/reload the ONE form tab
-     rather than stacking duplicate tabs (which would let the localStorage draft get
-     clobbered by whichever tab saved last). */
+  /* Prediction-form call-to-action pill in the leaderboard header. `.form-cta` is the live
+     (green, clickable) state; use a named tab target (e.g. wc-sf-form) so repeated clicks
+     re-focus/reload the ONE form tab rather than stacking duplicates. `.form-cta-pending` is
+     the greyed, non-clickable "form not open yet" state (swap the <span> for an <a class=
+     "form-cta"> when the round's form is ready to share). */
   .lb-head-left { display: inline-flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-  a.qf-form-link {
+  a.form-cta, .form-cta-pending {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: var(--green);
-    color: #fff;
     font-size: 13px;
     font-weight: 600;
     padding: 7px 14px;
@@ -128,8 +127,10 @@
     white-space: nowrap;
     transition: background 0.15s;
   }
-  a.qf-form-link:hover { background: #176d30; }
-  a.qf-form-link:active { background: #135e29; }
+  a.form-cta { background: var(--green); color: #fff; }
+  a.form-cta:hover { background: #176d30; }
+  a.form-cta:active { background: #135e29; }
+  .form-cta-pending { background: #eceef1; color: #9aa1ab; cursor: default; border: 1px solid #dfe3e8; }
   table.leaderboard {
     width: 100%;
     border-collapse: collapse;
@@ -921,7 +922,7 @@
       <span class="lb-head-left">Leaderboard
         <span class="meta" id="leaderboard-meta"></span>
       </span>
-      <a class="qf-form-link" href="form-qf.html" target="wc-qf-form" rel="noopener">📝 Enter QF Predictions ↗</a>
+      <span class="form-cta-pending" title="The semi-final prediction form opens once the quarter-finals are done">📝 Enter SF Predictions (pending)</span>
     </div>
     <table class="leaderboard" id="leaderboard-table">
       <thead><tr id="leaderboard-head"></tr></thead>

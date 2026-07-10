@@ -90,6 +90,10 @@
     overflow: hidden;
   }
   #leaderboard-card { overflow-x: auto; }
+  /* The leaderboard title/pill share the horizontal scroll container with the table, so pin them to
+     the left edge — otherwise they scroll off (heading clipped, pill adrift) when the table is
+     scrolled right to show the latest columns. Sticky-left keeps them anchored to the viewport. */
+  #leaderboard-card > .card-title { position: sticky; left: 0; width: 100%; box-sizing: border-box; background: var(--surface, #fff); z-index: 3; }
   /* Hide JS-rendered cards before renderAll() fires — they have a border/bg but no content yet,
      causing a flash of blank boxes on load/refresh. Reverts automatically once JS adds children. */
   .card:empty { display: none; }
@@ -1538,7 +1542,8 @@ const CONFIRMED_WORST_TEAM = "Iraq";
 // isn't shared across the 17 friends' own devices, unlike this baked-in list or anything fetched
 // from an external source. Kept as a same-device fallback/supplement, not removed.)
 const CONFIRMED_MISSED_PENALTIES = [
-  { player: "Lionel Messi", total: 1 }, // besoccer.com, confirmed via screenshot 2026-06-24
+  { player: "Lionel Messi", total: 1 }, // besoccer.com, confirmed via screenshot 2026-06-24 (NOTE: besoccer showed Total 2 on 2026-07-10 — no Golden Boot picker has Messi, so no scoring impact; left at 1 pending confirmation)
+  { player: "Kylian Mbappé", total: 1 }, // besoccer.com "Penalties Missed" ranking, screenshot 2026-07-10 (missed an in-game pen the night before) — hits the 11 Mbappé Golden Boot pickers at -5 each
 ];
 
 // Baked-in confirmed YELLOW cards (deployed, same for every viewer) -- for award picks the automatic
@@ -4945,6 +4950,26 @@ document.addEventListener("keydown", (e) => {
 });
 
 renderAll();
+
+// Leaderboard: default the horizontally-scrollable table to its RIGHT edge so the newest matchweek,
+// +/- PTS, Correct/Exact and Total are what you see first (rather than starting at MW1 on the far
+// left). The frozen #/Player columns stay pinned on the left. Only acts when the table overflows —
+// i.e. landscape on a phone, or a narrow desktop window; portrait shows a reduced 5-col view that
+// doesn't scroll. renderLeaderboard() only rewrites the inner rows, so this scroll position then
+// persists across live updates until the user scrolls it themselves.
+function scrollLeaderboardToLatest() {
+  const card = document.getElementById("leaderboard-card");
+  if (card && card.scrollWidth > card.clientWidth + 4) card.scrollLeft = card.scrollWidth;
+}
+requestAnimationFrame(() => requestAnimationFrame(scrollLeaderboardToLatest)); // after first paint
+// Re-apply when the phone rotates into landscape (CSS reveals the full column set on rotate).
+(() => {
+  const mq = window.matchMedia("(orientation: landscape)");
+  const onLandscape = e => { if (e.matches) setTimeout(scrollLeaderboardToLatest, 120); }; // let layout reflow
+  if (mq.addEventListener) mq.addEventListener("change", onLandscape);
+  else if (mq.addListener) mq.addListener(onLandscape); // older Safari
+})();
+
 fetchLiveScores(); // auto-check Wikipedia for the latest results as soon as the page loads, no click needed
 
 // Flips "Next Fixture" -> "LIVE Fixture" the moment kickoff passes. Deliberately only touches the

@@ -905,14 +905,21 @@ window.isEnglandSplashDay = function () {
     el.classList.add("england-splash"); // near-full-width England image (10px inside each edge)
     var eimg = el.querySelector("img");
     if (eimg) {
-      // The <img> ships with the normal mug hard-coded (cached, paints instantly); swapping to the
-      // larger England kit takes a moment to decode -> a mug->kit flash. Hide it until the kit has
-      // loaded so the mug never paints (navy -> kit). Fallback reveal after 300ms just in case.
+      // The <img> ships with the normal mug hard-coded (cached, paints instantly); on England days we
+      // swap it to the larger kit. GOTCHA: changing an <img>'s src keeps the OLD decoded bitmap (the
+      // mug) on screen until the NEW image finishes decoding -- so revealing before the kit is
+      // decode-ready shows a mug->kit flash (worse on phones, where the ~98KB/1000px kit decodes in
+      // >300ms). The old code revealed on a 300ms timeout / eimg.complete, which on slower devices
+      // un-hid the img while the stale mug was still painted = the flash. Fix: reveal ONLY once
+      // img.decode() resolves (kit genuinely ready to paint, no flash); the timeout is now just a
+      // safety net so the splash can never get stuck hidden -- worst case the kit lands a touch late,
+      // never the mug. Navy -> kit, guaranteed.
       eimg.style.visibility = "hidden";
-      eimg.onload = function () { eimg.style.visibility = "visible"; };
+      var revealKit = function () { eimg.style.visibility = "visible"; };
       eimg.src = window.GWIL_ENGLAND_SPLASH;
-      if (eimg.complete) eimg.style.visibility = "visible";
-      setTimeout(function () { eimg.style.visibility = "visible"; }, 300);
+      if (eimg.decode) { eimg.decode().then(revealKit).catch(revealKit); }
+      else { eimg.onload = revealKit; }
+      setTimeout(revealKit, 2000); // safety only -- decode() is the real reveal path
     }
     if (!el.querySelector(".splash-caption")) {
       var ecap = document.createElement("div"); ecap.className = "splash-caption";

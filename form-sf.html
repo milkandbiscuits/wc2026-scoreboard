@@ -83,6 +83,17 @@ header img.gwil-mug { height: 50px; width: auto; display: block; }
 
 /* Sticky top: header + a slim "confidence used" tracker that stays in view while scrolling */
 .topbar { position: sticky; top: 0; z-index: 10; }
+/* Dark-blue sub-banner under the navy header (mirrors the QF form's two-tier top). */
+.subbanner {
+  background: var(--navy); color: #dbe4f3;
+  border-top: 1px solid rgba(255,255,255,0.14);
+  padding: 8px 16px 9px; font-size: 12.5px; line-height: 1.4;
+}
+.subbanner .subbanner-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.subbanner strong { color: #fff; font-weight: 700; }
+.subbanner .progress-label { color: #cdd8ee; font-size: 12px; font-weight: 600; white-space: nowrap; flex-shrink: 0; margin: 0; }
+.subbanner .progress-bar { background: rgba(255,255,255,0.2); margin-top: 7px; }
+.subbanner .progress-fill { background: #4ade80; }
 .conf-tracker {
   background: var(--surface); border-bottom: 1px solid var(--border);
   padding: 7px 14px; display: flex; align-items: center; gap: 10px;
@@ -217,6 +228,16 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 }
 .restored-note.visible { display: block; }
 
+/* Dark-blue info panel — merges the instructions, progress and auto-save note into one navy container. */
+.info-panel { background: var(--navy); color: #c7d2e6; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+.info-panel .instructions { color: #c7d2e6; }
+.info-panel .instructions strong { color: #fff; font-weight: 600; }
+.info-panel .progress-bar { background: rgba(255,255,255,0.18); }
+.info-panel .progress-fill { background: #4ade80; }
+.info-panel .progress-label { color: #aebdd6; }
+.info-panel .save-note { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.16); color: #c7d2e6; margin: 12px 0 0; }
+.info-panel .restored-note { background: rgba(74,222,128,0.14); border-color: rgba(74,222,128,0.4); border-left-color: #4ade80; color: #d7f5e0; margin: 12px 0 0; }
+
 .excel-row { display: flex; gap: 8px; margin-top: 12px; }
 .excel-btn {
   flex: 1; padding: 9px 10px; font-size: 13px; font-weight: 500;
@@ -267,8 +288,8 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 .sf-title { font-size: 15px; font-weight: 700; color: var(--text); }
 .sf-date { font-weight: 500; font-size: 13px; color: var(--text-muted); }
 .sf-pts { font-size: 11px; font-weight: 600; color: var(--text-light); white-space: nowrap; }
-.sf-match { font-size: 13px; color: var(--text-muted); margin: 3px 0 8px; line-height: 1.4; }
-.sf-match .vs-lite { color: var(--text-light); margin: 0 3px; }
+.sf-match { font-size: 20px; font-weight: 700; color: var(--text); text-align: center; margin: 8px 0 14px; line-height: 1.25; }
+.sf-match .vs-lite { color: var(--text-light); font-weight: 500; font-size: 15px; margin: 0 8px; }
 .sf-q { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--border); }
 .sf-q:first-of-type { border-top: 0; }
 .sf-q-label { flex: 1; min-width: 0; font-size: 13.5px; color: var(--text); line-height: 1.35; }
@@ -292,6 +313,13 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
       </div>
     </div>
   </header>
+  <div class="subbanner">
+    <div class="subbanner-top">
+      <span>🏆 <strong>+5</strong> per correct answer</span>
+      <span class="progress-label" id="progress-label">0 of 2 answered</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+  </div>
 </div>
 
 <div class="container" id="form-container">
@@ -299,9 +327,6 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
   <div class="lock-banner" id="lock-banner">✍️ <strong>Fill in your Semi-final answers now — you just can't submit them yet.</strong><span class="lock-when" id="lock-when">Submitting opens once the Quarter-finals are done.</span></div>
 
   <div class="multitab-banner" id="multitab-banner">⚠️ <strong>This form is open in another tab.</strong> Finish and submit in just one — editing it in two tabs at once can overwrite your answers.</div>
-
-  <div class="save-note" id="save-note">💾 Your answers will save even if you refresh or close the browser — come back on the same device to finish.</div>
-  <div class="restored-note" id="restored-note">↩ Restored your saved answers — they save automatically, even if you refresh or close the browser.</div>
 
   <div class="card">
     <label class="field-label" for="player-select">Your name</label>
@@ -317,10 +342,10 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
     </select>
   </div>
 
-  <div class="card">
-    <p class="instructions">Answer Gwil's <strong>5 questions</strong> for each semi-final. <strong>Each correct answer bags you +5 pts.</strong> Corners, cards, shots on target and injury time are counted at <strong>full-time (90 mins + stoppage)</strong>, before any extra time.</p>
-    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
-    <div class="progress-label" id="progress-label">0 of 2 matches answered</div>
+  <div class="info-panel">
+    <p class="instructions">Answer Gwil's <strong>5 questions</strong> for each semi-final. <strong>Each correct answer bags you +5 pts — 50 Gwil points up for grabs!</strong> Corners, cards, shots on target and injury time are counted at <strong>full-time (90 mins + stoppage)</strong>, before any extra time.</p>
+    <div class="save-note" id="save-note">💾 Your answers will save even if you refresh or close the browser — come back on the same device to finish.</div>
+    <div class="restored-note" id="restored-note">↩ Restored your saved answers — they save automatically, even if you refresh or close the browser.</div>
   </div>
 
   <div class="submit-error" id="submit-error">
@@ -350,11 +375,12 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
 // each side is a [teamA, teamB] array (the two QF contestants). Shown as context and
 // used to build the "which team will qualify?" options. Lock each side to the real team
 // as QF results land (swap its array for the winning string), exactly like the QF form.
-//   SF1 = Winner(QF1: France/Morocco) v Winner(QF2: Norway/England)
-//   SF2 = Winner(QF3: Spain/Belgium)  v Winner(QF4: Argentina/Switzerland)
+//   SF1 = France v Spain, SF2 = England v Argentina (user-confirmed pairing).
+//   QF winners: France beat Morocco, England beat Norway, Spain beat Belgium, Argentina beat Switzerland.
+// LOCKED 2026-07-12 once the QF results were in.
 const FIXTURES = [
-  [["France", "Morocco"], ["Norway", "England"]],
-  [["Spain", "Belgium"], ["Argentina", "Switzerland"]],
+  ["France", "Spain"],
+  ["England", "Argentina"],
 ];
 const N = FIXTURES.length;
 
@@ -520,7 +546,7 @@ function validate() {
   });
 
   document.getElementById('progress-fill').style.width = Math.round(done / N * 100) + '%';
-  document.getElementById('progress-label').textContent = `${done} of ${N} matches answered`;
+  document.getElementById('progress-label').textContent = `${done} of ${N} answered`;
 
   const player = document.getElementById('player-select').value;
   const allGood = done === N && player;

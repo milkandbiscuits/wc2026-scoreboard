@@ -317,7 +317,7 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
   </header>
   <div class="subbanner">
     <div class="subbanner-top">
-      <span>🏆 <strong>+5</strong> per correct answer</span>
+      <span>🏆 <strong>+5 / −5</strong> pts per Gwilianni answer</span>
       <span class="progress-label" id="progress-label">0 of 2 answered</span>
     </div>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
@@ -345,7 +345,7 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
   </div>
 
   <div class="info-panel">
-    <p class="instructions">Answer Gwil's <strong>5 questions</strong> for each semi-final. <strong>Each correct answer bags you +5 pts — 50 Gwil points up for grabs!</strong> Corners, cards and shots on target count <strong>to the end of the match — including extra time</strong> if it's played (not just 90 mins + injury time).</p>
+    <p class="instructions">Answer Gwilianni's <strong>5 questions</strong> for each semi-final. <strong>Each answer you get spot-on = +5 pts; each you get wrong = −5 pts.</strong> Up to <strong>50 points up for grabs, or up to 50 kicks in the Gwillocks!</strong> Corners, cards and shots on target count <strong>to the end of the match — including extra time</strong> if it's played (not just 90 mins + injury time).</p>
     <div class="save-note" id="save-note">💾 Your answers will save even if you refresh or close the browser — come back on the same device to finish.</div>
     <div class="restored-note" id="restored-note">↩ Restored your saved answers — they save automatically, even if you refresh or close the browser.</div>
   </div>
@@ -390,7 +390,7 @@ const N = FIXTURES.length;
 const MATCH_DATES = ['Tue 14 Jul', 'Wed 15 Jul'];
 
 // Gwil's 5 questions per match. Q1 is the team pick (dropdown); Q2–Q5 are numbers.
-// Each correct answer = +5 pts (scored on the scoreboard, not here).
+// Each answer: +5 if exact/correct, −5 if wrong (scored on the scoreboard, not here).
 const NUM_QS = [
   { key: 'corners', label: 'How many corners in the match?',   min: 0, max: 40 },
   { key: 'cards',   label: 'How many cards in the match?',      min: 0, max: 25 },
@@ -508,7 +508,7 @@ function buildList() {
     card.innerHTML = `
       <div class="sf-head">
         <span class="sf-title">Semi-final ${mi + 1}${MATCH_DATES[mi] ? ` <span class="sf-date">· ${MATCH_DATES[mi]}</span>` : ''}</span>
-        <span class="sf-pts">+5 per correct</span>
+        <span class="sf-pts">+5 / −5 each</span>
       </div>
       <div class="sf-match" id="match${mi}">${matchLabelHTML(mi)}</div>
       <div class="sf-q">

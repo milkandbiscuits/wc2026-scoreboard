@@ -1153,12 +1153,18 @@ DATA.matchweeks.push({
 // KEPT `resultsOnly: true` (hidden) until ACTIVATED: fill real teams (once QFs finish), remove
 // resultsOnly at matchweek + fixture level, ingest predictions (PDF Import-JSON, same as QF). Hold the
 // push until all 17 are in (fairness). SF times user-confirmed: both 8pm BST (Tue 14 / Wed 15 Jul).
+// TAB ACTIVATED 2026-07-12 (real teams + KO shown, tab visible) BUT predictions HELD: `predictions: {}`
+// stays empty so every cell renders "–" until the user confirms all 17 are in, then bakes them in and
+// re-pushes (fairness -- see feedback_hold_partial_predictions). `resultsOnly` removed at matchweek +
+// fixture level so the SF tab/column show; `mode:"questions"` kept so it scores +5/-5 once actualStats
+// land. Teams locked from form-sf.html (SF1 France v Spain, SF2 England v Argentina; QF winners: France
+// beat Morocco, England beat Norway, Spain beat Belgium, Argentina beat Switzerland). KO both 8pm BST
+// (19:00Z), user-confirmed: SF1 Tue 14 Jul, SF2 Wed 15 Jul.
 DATA.matchweeks.push({
   name: "Semi-finals",
-  resultsOnly: true,
   fixtures: [
-    { home: "TBD", away: "TBD", mode: "questions", resultsOnly: true, actual: null, actualStats: null, predictions: {}, kickoff: "2026-07-14T19:00:00Z" }, // SF1: Tue 14 Jul, 8pm BST
-    { home: "TBD", away: "TBD", mode: "questions", resultsOnly: true, actual: null, actualStats: null, predictions: {}, kickoff: "2026-07-15T19:00:00Z" }, // SF2: Wed 15 Jul, 8pm BST
+    { home: "France", away: "Spain", mode: "questions", actual: null, actualStats: null, predictions: {}, kickoff: "2026-07-14T19:00:00Z" }, // SF1: Tue 14 Jul, 8pm BST
+    { home: "England", away: "Argentina", mode: "questions", actual: null, actualStats: null, predictions: {}, kickoff: "2026-07-15T19:00:00Z" }, // SF2: Wed 15 Jul, 8pm BST
   ],
 });
 // Final + 3rd-place: results-only forever (semis end the predicting game -- NO predictions here).

@@ -391,7 +391,7 @@
   .q-nums { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin: 2px 0; }
   .q-num { font-size: 10px; font-weight: 600; color: #667; background: #f1f3f4; border-radius: 4px; padding: 1px 4px; }
   .q-hit { color: var(--green) !important; background: var(--green-bg); border-radius: 4px; padding: 0 3px; }
-  .q-miss { color: #b0b0b0; }
+  .q-miss { color: var(--red) !important; }
   .q-actual { font-size: 11px; line-height: 1.3; text-align: center; }
   .q-actual-score { font-weight: 700; }
   .q-actual .q-win { color: var(--green); font-weight: 700; }
@@ -977,7 +977,7 @@ window.isEnglandSplashDay = function () {
       <span class="lb-head-left">Leaderboard
         <span class="meta" id="leaderboard-meta"></span>
       </span>
-      <span class="form-cta-pending" title="The semi-final prediction form opens once the quarter-finals are done">📝 Enter SF Predictions (pending)</span>
+      <a class="form-cta" href="form-sf.html" target="wc-sf-form" rel="noopener">📝 Enter SF Predictions ↗</a>
     </div>
     <table class="leaderboard" id="leaderboard-table">
       <thead><tr id="leaderboard-head"></tr></thead>
@@ -1007,8 +1007,8 @@ window.isEnglandSplashDay = function () {
       <div><span class="mw-live-lead-box" style="padding:0 7px;">±0</span> = currently out in front this week (no bonus yet — fills solid green once the week's done)</div>
     </div>
     <div class="legend" id="sf-legend" style="display:none;">
-      <div><strong>Semi-finals — Gwil's 5 questions:</strong> each answer is worth +5, <strong>exact match only</strong> (max +25 a game). No stakes this round.</div>
-      <div><span class="swatch" style="background:var(--green-bg);border:1px solid var(--green)"></span>Green = you nailed that answer exactly (+5)</div>
+      <div><strong>Semi-finals — Gwil's 5 questions:</strong> each answer is <strong>+5 if exact, −5 if wrong</strong> (max +25, min −25 a game). No stakes this round.</div>
+      <div><span class="swatch" style="background:var(--green-bg);border:1px solid var(--green)"></span>Green = nailed that answer exactly (+5) &nbsp;·&nbsp; <span style="color:var(--red);font-weight:700;">Red</span> = wrong (−5)</div>
       <div>🏆 Winner pick &nbsp;·&nbsp; <strong>CO</strong> Corners &nbsp;·&nbsp; <strong>CD</strong> Cards &nbsp;·&nbsp; <strong>ST</strong> Shots on target &nbsp;·&nbsp; <strong>AT</strong> Added time (injury minutes boarded at 90′)</div>
       <div><span class="mw-leader-box" style="padding:1px 8px;">+5</span> = won the week (most points across both semis; locks once both are played)</div>
     </div>
@@ -1142,7 +1142,7 @@ DATA.matchweeks.push({
 //
 // ── SEMI-FINALS: NEW "5 QUESTIONS" GAME (mode:"questions") ───────────────────────────────────
 // The semis are the END of Gwil's predicting game and use a NEW model, not scoreline+stake. Each
-// semi has FIVE questions worth +5 pts each, EXACT MATCH ONLY (max +25/match): (1) `qualify` = which
+// semi has FIVE questions: +5 pts EXACT, -5 pts WRONG (max +25, min -25/match): (1) `qualify` = which
 // team wins (matched against the actual winner from `actual{h,a}`); (2) corners, (3) cards, (4) shots
 // (on target), (5) added (injury time boarded at 90'), each matched against `actualStats`. Predictions
 // shape: { qualify:"France", corners:N, cards:N, shots:N, added:N }. Scored by gradeQuestions() via the
@@ -1308,9 +1308,10 @@ function gradeFixture(pred, actual) {
 }
 
 // Semi-final "5 questions" scoring (fixture.mode === "questions"). Each of the 5 answers is worth
-// +5 pts, EXACT MATCH ONLY (max +25). `qualify` (a team name) is matched against the actual winner;
-// corners/cards/shots/added against `stats` (Gwil-supplied actualStats). Returns { pts, hits } or
-// null (fixture not fully resolved OR player hasn't submitted) -> pending, mirroring gradeFixture.
+// +5 pts if EXACT, -5 pts if WRONG (max +25, min -25 a game -- scoring change 2026-07-12, was
+// +5-only). `qualify` (a team name) is matched against the actual winner; corners/cards/shots/added
+// against `stats` (Gwil-supplied actualStats). Returns { pts, hits, misses, checks } or null
+// (fixture not fully resolved OR player hasn't submitted) -> pending, mirroring gradeFixture.
 function actualWinnerTeam(actual, fixture) {
   if (!actual) return null;
   if (actual.h > actual.a) return fixture.home;
@@ -1325,7 +1326,12 @@ function gradeQuestions(pred, actual, stats, fixture) {
   const checks = { qualify: winner != null && pred.qualify === winner };
   SF_QUESTION_KEYS.forEach(k => { checks[k] = Number(pred[k]) === Number(stats[k]); });
   const hits = Object.values(checks).filter(Boolean).length;
-  return { pts: hits * 5, hits, checks };
+  // +5 per exact answer, -5 per wrong one. `qualify` only counts once the actual winner is known --
+  // if the recorded result is still a level score with no shootout winner, that answer stays neutral
+  // (neither +5 nor -5), so a half-entered result never wrongly docks everyone -5 on the winner pick.
+  const gradeable = SF_QUESTION_KEYS.length + (winner != null ? 1 : 0);
+  const misses = gradeable - hits;
+  return { pts: hits * 5 - misses * 5, hits, misses, checks };
 }
 
 // Matchweek-leader bonus tie-break, in order: (1) highest matchweek points (doubled scores count),
@@ -1389,7 +1395,7 @@ function computeTotals(excludeKey, onlyKeys, excludeKeys) {
       // the Total Goals/Cards totals. Skip them entirely here: no grading, and they don't gate the
       // matchweek-winner bonus (anyResolved/allResolved track scored fixtures only).
       if (fixture.resultsOnly) return;
-      // Semi-final "5 questions" fixtures score via gradeQuestions (+5 per exact answer), not the
+      // Semi-final "5 questions" fixtures score via gradeQuestions (+5 exact / -5 wrong per answer), not the
       // scoreline engine. They need BOTH the score (getActual, for the winner) and actualStats
       // (Gwil-supplied) to resolve; they feed byMw + the MW-winner bonus, but not Correct/Exact/wrong.
       if (fixture.mode === "questions") {
@@ -2847,7 +2853,7 @@ function renderFixtureRow(mwIndex, fixIndex, fixture) {
       const hit = k => (g && g.checks[k]) ? " q-hit" : (resolved ? " q-miss" : "");
       const ptsHtml = g === null
         ? `<div class="pts-line pending">(–)</div>`
-        : `<div class="pts-line ${g.pts > 0 ? "correct" : "q-zero"}">+${g.pts}</div>`;
+        : `<div class="pts-line ${g.pts > 0 ? "correct" : g.pts < 0 ? "wrong" : "q-zero"}">${g.pts > 0 ? "+" : ""}${g.pts}</div>`;
       return `<td class="player-cell qmode">
         <div class="q-qualify${hit("qualify")}" title="Winner pick">🏆 ${pred.qualify}</div>
         <div class="q-nums"><span class="q-num${hit("corners")}" title="Corners">CO${pred.corners}</span><span class="q-num${hit("cards")}" title="Cards">CD${pred.cards}</span><span class="q-num${hit("shots")}" title="Shots on target">ST${pred.shots}</span><span class="q-num${hit("added")}" title="Added time (injury minutes boarded at 90')">AT${pred.added}</span></div>

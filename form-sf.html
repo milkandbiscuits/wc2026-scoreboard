@@ -682,10 +682,21 @@ function buildWeb3Payload(player, preds) {
   return payload;
 }
 
-// Each sender resolves on success and THROWS on any failure, so handleSubmit can fall through to the
-// next backend. FormSubmit returns HTTP 200 even on failure, so its JSON success flag is also checked.
+// fetch with an abort timeout. Without this a HUNG backend leaves the submit stuck on "Submitting…"
+// forever and the fallback never fires — FormSubmit was seen BOTH 500ing AND hanging connections on
+// 2026-07-12, so a hang must abort and fall through, not wait indefinitely.
+async function fetchWithTimeout(url, opts, ms = 10000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
+  finally { clearTimeout(timer); }
+}
+
+// Each sender resolves on success and THROWS on any failure (incl. a timeout abort), so handleSubmit
+// can fall through to the next backend. FormSubmit returns HTTP 200 even on failure, so its JSON
+// success flag is also checked.
 async function sendViaFormSubmit(player, preds) {
-  const res = await fetch(SUBMIT_ENDPOINT, {
+  const res = await fetchWithTimeout(SUBMIT_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify(buildEmailPayload(player, preds)),
@@ -696,7 +707,7 @@ async function sendViaFormSubmit(player, preds) {
 }
 async function sendViaWeb3Forms(player, preds) {
   if (!WEB3FORMS_ACCESS_KEY) throw new Error('Web3Forms not configured (no access key)');
-  const res = await fetch(WEB3FORMS_ENDPOINT, {
+  const res = await fetchWithTimeout(WEB3FORMS_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify(buildWeb3Payload(player, preds)),

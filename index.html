@@ -397,6 +397,8 @@
   .q-actual .q-win { color: var(--green); font-weight: 700; }
   .q-actual-stats { font-size: 10px; color: #777; }
   .q-actual.q-await { color: #999; font-style: italic; }
+  .q-actual.q-live .q-actual-score { color: var(--red); letter-spacing: 0.3px; }
+  .pts-line.q-live-note { color: var(--red); font-weight: 600; font-size: 11px; }
   .half-badge { font-size: 11px; line-height: 1; position: relative; top: -1px; color: #4caf77; opacity: 0.85; }
   .mw-leader-box {
     display: inline-block;
@@ -1013,6 +1015,7 @@ window.isEnglandSplashDay = function () {
       <div><span class="swatch" style="background:var(--green-bg);border:1px solid var(--green)"></span>Green = nailed that answer exactly (+5) &nbsp;·&nbsp; <span style="color:var(--red);font-weight:700;">Red</span> = wrong (−5)</div>
       <div>🏆 Winner pick &nbsp;·&nbsp; <strong>CO</strong> Corners &nbsp;·&nbsp; <strong>CD</strong> Cards &nbsp;·&nbsp; <strong>ST</strong> Shots on target &nbsp;·&nbsp; <strong>AT</strong> Added time (injury minutes boarded at 90′)</div>
       <div><span class="mw-leader-box" style="padding:1px 8px;">+5</span> = won the week (most points across both semis; locks once both are played)</div>
+      <div><span style="color:var(--red);font-weight:700;">🔴 LIVE</span> = in-play provisional — answers shade green/red against the <em>current</em> stats as a tracker, but <strong>nothing is scored until full-time</strong> (leaderboard totals don't move). Corners/cards/shots climb during the game, so a pick only turns green as the count reaches it.</div>
     </div>
     <div class="toolbar">
       <button class="reset-btn fetch-btn js-fetch-btn">⟳ Fetch latest results</button>
@@ -1165,7 +1168,7 @@ DATA.matchweeks.push({
 DATA.matchweeks.push({
   name: "Semi-finals",
   fixtures: [
-    { home: "France", away: "Spain", mode: "questions", actual: null, actualStats: null, predictions: {"Fred + Teilo":{"qualify":"France","corners":9,"cards":3,"shots":12,"added":5},"Rhodri B":{"qualify":"France","corners":12,"cards":2,"shots":8,"added":8},"Rhodri W":{"qualify":"France","corners":8,"cards":4,"shots":7,"added":6},"Llion":{"qualify":"France","corners":10,"cards":5,"shots":12,"added":6},"Nick B":{"qualify":"France","corners":8,"cards":2,"shots":8,"added":4},"Ant":{"qualify":"France","corners":11,"cards":4,"shots":8,"added":9},"Lane":{"qualify":"France","corners":10,"cards":3,"shots":11,"added":8},"Gwil":{"qualify":"Spain","corners":7,"cards":3,"shots":9,"added":8},"Matt":{"qualify":"France","corners":8,"cards":3,"shots":8,"added":7},"Liam B":{"qualify":"France","corners":8,"cards":6,"shots":8,"added":6},"Gaz T":{"qualify":"Spain","corners":10,"cards":6,"shots":7,"added":7},"Guto":{"qualify":"France","corners":7,"cards":5,"shots":14,"added":7},"Gaz E":{"qualify":"Spain","corners":8,"cards":3,"shots":7,"added":8},"Trystan H":{"qualify":"France","corners":10,"cards":4,"shots":11,"added":7},"Nick S":{"qualify":"France","corners":10,"cards":3,"shots":12,"added":7},"Dan D":{"qualify":"France","corners":13,"cards":5,"shots":7,"added":8},"🤖":{"qualify":"France","corners":9,"cards":4,"shots":9,"added":6}}, kickoff: "2026-07-14T19:00:00Z" }, // SF1: Tue 14 Jul, 8pm BST
+    { home: "France", away: "Spain", mode: "questions", actual: null, actualStats: null, liveStats: {corners:7,cards:2,shots:2}, predictions: {"Fred + Teilo":{"qualify":"France","corners":9,"cards":3,"shots":12,"added":5},"Rhodri B":{"qualify":"France","corners":12,"cards":2,"shots":8,"added":8},"Rhodri W":{"qualify":"France","corners":8,"cards":4,"shots":7,"added":6},"Llion":{"qualify":"France","corners":10,"cards":5,"shots":12,"added":6},"Nick B":{"qualify":"France","corners":8,"cards":2,"shots":8,"added":4},"Ant":{"qualify":"France","corners":11,"cards":4,"shots":8,"added":9},"Lane":{"qualify":"France","corners":10,"cards":3,"shots":11,"added":8},"Gwil":{"qualify":"Spain","corners":7,"cards":3,"shots":9,"added":8},"Matt":{"qualify":"France","corners":8,"cards":3,"shots":8,"added":7},"Liam B":{"qualify":"France","corners":8,"cards":6,"shots":8,"added":6},"Gaz T":{"qualify":"Spain","corners":10,"cards":6,"shots":7,"added":7},"Guto":{"qualify":"France","corners":7,"cards":5,"shots":14,"added":7},"Gaz E":{"qualify":"Spain","corners":8,"cards":3,"shots":7,"added":8},"Trystan H":{"qualify":"France","corners":10,"cards":4,"shots":11,"added":7},"Nick S":{"qualify":"France","corners":10,"cards":3,"shots":12,"added":7},"Dan D":{"qualify":"France","corners":13,"cards":5,"shots":7,"added":8},"🤖":{"qualify":"France","corners":9,"cards":4,"shots":9,"added":6}}, kickoff: "2026-07-14T19:00:00Z" }, // SF1: Tue 14 Jul, 8pm BST
     { home: "England", away: "Argentina", mode: "questions", actual: null, actualStats: null, predictions: {"Fred + Teilo":{"qualify":"England","corners":8,"cards":4,"shots":15,"added":6},"Rhodri B":{"qualify":"Argentina","corners":12,"cards":4,"shots":8,"added":10},"Rhodri W":{"qualify":"Argentina","corners":9,"cards":6,"shots":9,"added":8},"Llion":{"qualify":"Argentina","corners":9,"cards":6,"shots":14,"added":8},"Nick B":{"qualify":"England","corners":12,"cards":4,"shots":8,"added":4},"Ant":{"qualify":"England","corners":14,"cards":6,"shots":6,"added":11},"Lane":{"qualify":"Argentina","corners":12,"cards":4,"shots":10,"added":8},"Gwil":{"qualify":"England","corners":8,"cards":4,"shots":4,"added":8},"Matt":{"qualify":"England","corners":9,"cards":4,"shots":11,"added":8},"Liam B":{"qualify":"England","corners":8,"cards":6,"shots":8,"added":6},"Gaz T":{"qualify":"Argentina","corners":10,"cards":6,"shots":8,"added":8},"Guto":{"qualify":"Argentina","corners":8,"cards":4,"shots":16,"added":8},"Gaz E":{"qualify":"Argentina","corners":7,"cards":2,"shots":6,"added":7},"Trystan H":{"qualify":"England","corners":11,"cards":5,"shots":10,"added":8},"Nick S":{"qualify":"England","corners":10,"cards":6,"shots":10,"added":8},"Dan D":{"qualify":"Argentina","corners":11,"cards":8,"shots":5,"added":10},"🤖":{"qualify":"England","corners":10,"cards":5,"shots":10,"added":7}}, kickoff: "2026-07-15T19:00:00Z" }, // SF2: Wed 15 Jul, 8pm BST
   ],
 });
@@ -2838,21 +2841,38 @@ function renderFixtureRow(mwIndex, fixIndex, fixture) {
   if (fixture.mode === "questions") {
     const stats = fixture.actualStats;
     const resolved = !!(actual && stats);
+    // In-play provisional stats: a `liveStats` object (partial — e.g. {corners,cards,shots}) shades each
+    // player's answers green/red against the CURRENT values as a live tracker, WITHOUT touching the
+    // leaderboard (computeTotals only reads actualStats, which stays null until full-time). Unknown keys
+    // (added, qualify winner) stay neutral. Cleared once the final actualStats are baked in.
+    const ls = fixture.liveStats;
+    const live = !resolved && !!ls;
     const winner = resolved ? actualWinnerTeam(actual, fixture) : null;
-    const actualCell = resolved
-      ? `<div class="q-actual"><div class="q-actual-score">${actual.h}–${actual.a}${winner ? ` <span class="q-win">${winner}</span>` : ""}</div><div class="q-actual-stats">CO${stats.corners} · CD${stats.cards} · ST${stats.shots} · AT${stats.added}</div></div>`
-      : `<div class="q-actual q-await">Awaiting result</div>`;
+    let actualCell;
+    if (resolved) {
+      actualCell = `<div class="q-actual"><div class="q-actual-score">${actual.h}–${actual.a}${winner ? ` <span class="q-win">${winner}</span>` : ""}</div><div class="q-actual-stats">CO${stats.corners} · CD${stats.cards} · ST${stats.shots} · AT${stats.added}</div></div>`;
+    } else if (live) {
+      const v = k => ls[k] == null ? "—" : ls[k];
+      actualCell = `<div class="q-actual q-live"><div class="q-actual-score">🔴 LIVE</div><div class="q-actual-stats">CO${v("corners")} · CD${v("cards")} · ST${v("shots")} · AT${v("added")}</div></div>`;
+    } else {
+      actualCell = `<div class="q-actual q-await">Awaiting result</div>`;
+    }
     const qCells = DATA.players.map(p => {
       const pred = fixture.predictions[p];
       if (!pred) return `<td class="player-cell no-pred"><div class="pred-line">–</div></td>`;
-      const g = gradeQuestions(pred, resolved ? actual : null, resolved ? stats : null, fixture);
-      const hit = k => (g && g.checks[k]) ? " q-hit" : (resolved ? " q-miss" : "");
-      const ptsHtml = g === null
-        ? `<div class="pts-line pending">(–)</div>`
-        : `<div class="pts-line ${g.pts > 0 ? "correct" : g.pts < 0 ? "wrong" : "q-zero"}">${g.pts > 0 ? "+" : ""}${g.pts}</div>`;
+      const g = resolved ? gradeQuestions(pred, actual, stats, fixture) : null;
+      const shade = k => {
+        if (resolved) return (g && g.checks[k]) ? " q-hit" : " q-miss";
+        if (live && ls[k] != null) return Number(pred[k]) === Number(ls[k]) ? " q-hit" : " q-miss";
+        return ""; // awaiting, or a value not yet known (qualify/added while live) — neutral, unscored
+      };
+      const ptsHtml = resolved
+        ? `<div class="pts-line ${g.pts > 0 ? "correct" : g.pts < 0 ? "wrong" : "q-zero"}">${g.pts > 0 ? "+" : ""}${g.pts}</div>`
+        : (live ? `<div class="pts-line q-live-note" title="Provisional — green/red vs the current in-play stats; not scored until full-time">🔴 live</div>`
+                : `<div class="pts-line pending">(–)</div>`);
       return `<td class="player-cell qmode">
-        <div class="q-qualify${hit("qualify")}" title="Winner pick">🏆 ${pred.qualify}</div>
-        <div class="q-nums"><span class="q-num${hit("corners")}" title="Corners">CO${pred.corners}</span><span class="q-num${hit("cards")}" title="Cards">CD${pred.cards}</span><span class="q-num${hit("shots")}" title="Shots on target">ST${pred.shots}</span><span class="q-num${hit("added")}" title="Added time (injury minutes boarded at 90')">AT${pred.added}</span></div>
+        <div class="q-qualify${shade("qualify")}" title="Winner pick">🏆 ${pred.qualify}</div>
+        <div class="q-nums"><span class="q-num${shade("corners")}" title="Corners">CO${pred.corners}</span><span class="q-num${shade("cards")}" title="Cards">CD${pred.cards}</span><span class="q-num${shade("shots")}" title="Shots on target">ST${pred.shots}</span><span class="q-num${shade("added")}" title="Added time (injury minutes boarded at 90')">AT${pred.added}</span></div>
         ${ptsHtml}
       </td>`;
     }).join("");

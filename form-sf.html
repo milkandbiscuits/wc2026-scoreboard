@@ -350,6 +350,15 @@ select:focus, input:focus { outline: none; border-color: var(--accent); box-shad
     <div class="restored-note" id="restored-note">↩ Restored your saved answers — they save automatically, even if you refresh or close the browser.</div>
   </div>
 
+  <div class="excel-row">
+    <button type="button" class="excel-btn" onclick="downloadTemplate()">⬇ Download SF template</button>
+    <label class="excel-btn import" style="display:flex;align-items:center;justify-content:center;gap:6px;">
+      ⬆ Import Excel
+      <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(this)">
+    </label>
+  </div>
+  <p class="import-note">Prefer to fill in offline? Download the template, complete it, then import it here to populate the form.</p>
+
   <div class="submit-error" id="submit-error">
     Couldn't send automatically — no problem. <a href="#" id="mailto-fallback">Tap here to email your answers to Gwil instead</a>, or check your connection and press Submit again.
   </div>
@@ -775,6 +784,78 @@ function downloadPredictions() {
   XLSX.utils.book_append_sheet(wb, ws, 'WC26 SF Predictions');
   const who = player && player !== '🤖' ? ` - ${player}` : '';
   XLSX.writeFile(wb, `WC26 SF Predictions${who}.xlsx`);
+}
+
+// Blank template with the SAME columns as downloadPredictions, so a filled-in template re-imports
+// cleanly via "Import Excel". Lets players prepare their answers offline.
+function downloadTemplate() {
+  if (typeof XLSX === 'undefined') { alert('Still loading — try again in a moment'); return; }
+  const rows = [['Match', 'Teams', 'Qualify', 'Corners', 'Cards', 'Shots on target', "Injury time @90'"]];
+  FIXTURES.forEach((_, mi) => rows.push([`Semi-final ${mi + 1}`, tieLabel(mi), '', '', '', '', '']));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:14},{wch:34},{wch:16},{wch:10},{wch:10},{wch:16},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'WC26 SF Predictions');
+  XLSX.writeFile(wb, 'WC26 SF Predictions Template.xlsx');
+}
+
+// Read a filled template/backup .xlsx and populate the form. Each row is matched to its semi-final by
+// the "Semi-final N" label (falling back to the Teams column), then the Qualify dropdown (must be one
+// of that semi's two teams) and the four number fields are set. Change events are fired so the draft
+// autosaves and the form re-validates, exactly as if the player had typed the values.
+function importExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (typeof XLSX === 'undefined') { alert('Still loading — try again in a moment'); return; }
+  const NUM_COLS = ['Corners', 'Cards', 'Shots on target', "Injury time @90'"];
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      let imported = 0; const errors = [];
+      const touch = el => { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+      rows.forEach((row, ri) => {
+        if (ri === 0) return; // header row
+        const [rMatch, rTeams, rQualify, ...rNums] = row;
+        if ((rMatch == null || rMatch === '') && (rTeams == null || rTeams === '')) return; // blank row
+        // Which semi is this? Prefer "Semi-final N", else match the Teams column to the tie label.
+        let mi = -1;
+        const m = String(rMatch == null ? '' : rMatch).match(/(\d+)/);
+        if (m) mi = parseInt(m[1], 10) - 1;
+        if (mi < 0 || mi >= FIXTURES.length) {
+          mi = FIXTURES.findIndex((_, k) => tieLabel(k).toLowerCase() === String(rTeams == null ? '' : rTeams).trim().toLowerCase());
+        }
+        if (mi < 0 || mi >= FIXTURES.length) { errors.push(`Row ${ri + 1}: couldn't match "${rMatch || rTeams || ''}" to a semi-final`); return; }
+        // Qualify — must be one of the two teams for this semi.
+        if (rQualify != null && String(rQualify).trim() !== '') {
+          const sel = document.getElementById(`q${mi}team`);
+          const opt = [...sel.options].find(o => o.value && o.value.toLowerCase() === String(rQualify).trim().toLowerCase());
+          if (opt) { sel.value = opt.value; touch(sel); }
+          else errors.push(`SF${mi + 1}: "${rQualify}" isn't one of ${tieLabel(mi)}`);
+        }
+        // The four numbers, in sheet order (= NUM_QS order).
+        NUM_QS.forEach((q, qi) => {
+          const val = rNums[qi];
+          if (val == null || val === '') return;
+          const n = parseInt(val, 10);
+          if (isNaN(n)) { errors.push(`SF${mi + 1} ${NUM_COLS[qi]}: "${val}" isn't a number`); return; }
+          if (n < q.min || n > q.max) errors.push(`SF${mi + 1} ${NUM_COLS[qi]}: ${n} is outside ${q.min}–${q.max}`);
+          const el = document.getElementById(`q${mi}${q.key}`);
+          if (el) { el.value = n; touch(el); }
+        });
+        imported++;
+      });
+      validate();
+      const notes = errors.length ? `\n\nWarnings:\n${errors.join('\n')}` : '';
+      alert(`Imported ${imported} semi-final${imported === 1 ? '' : 's'}.${notes}`);
+      input.value = '';
+    } catch (err) {
+      alert('Could not read the file — make sure it\'s a valid Excel file (.xlsx)');
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────

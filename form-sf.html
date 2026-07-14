@@ -620,6 +620,15 @@ const SUBMIT_CC = 'gwilym.morgan1@gmail.com';      // copy to Gwil's Gmail (ride
 const SUBMIT_ENDPOINT = 'https://formsubmit.co/ajax/' + SUBMIT_EMAIL;
 const EMAIL_SUBJECT_PREFIX = "Gwil's WC26 SF";
 
+// Backup email backend (Web3Forms) — auto-used ONLY if FormSubmit fails, so an outage of either
+// provider can't block submissions (FormSubmit was returning HTTP 500 for everyone on 2026-07-12).
+// Paste the free access key from https://web3forms.com below to enable it; left blank, the form
+// behaves exactly as before (FormSubmit → mailto fallback). Web3Forms needs NO per-recipient
+// activation click — the access key IS the setup. Get a key: web3forms.com → enter the delivery
+// email (Gwil's) → the key arrives by email. Free tier = 250 submissions/month.
+const WEB3FORMS_ACCESS_KEY = 'd6803203-fb54-4bf0-b873-16f6c1093449';  // Web3Forms backup (registered 2026-07-12); delivers to the inbox tied to this key
+const WEB3FORMS_ENDPOINT = 'https://api.web3forms.com/submit';
+
 function collectPreds() {
   return FIXTURES.map((_, mi) => {
     const o = { match: `Semi-final ${mi + 1}`, tie: tieLabel(mi), qualify: document.getElementById(`q${mi}team`).value };
@@ -654,6 +663,48 @@ function buildEmailPayload(player, preds) {
   return payload;
 }
 
+// Web3Forms payload: same human-readable rows + the Import JSON blob, plus the access key. Web3Forms
+// uses `subject`/`from_name` (not FormSubmit's `_subject`) and delivers to the address the key is
+// registered to (so no `_cc` here — set additional recipients in the Web3Forms dashboard if needed).
+function buildWeb3Payload(player, preds) {
+  const payload = {
+    access_key: WEB3FORMS_ACCESS_KEY,
+    subject: `${EMAIL_SUBJECT_PREFIX} — ${player}`,
+    from_name: "Gwil's WC26 SF form",
+    Player: player,
+    Submitted: new Date().toLocaleString('en-GB'),
+  };
+  preds.forEach((p, mi) => {
+    payload[`SF${mi + 1} — ${p.tie}`] =
+      `Qualify: ${p.qualify} · Corners: ${p.corners} · Cards: ${p.cards} · Shots on target: ${p.shots} · Injury time @90′: ${p.added}`;
+  });
+  payload['Import JSON'] = JSON.stringify(preds);
+  return payload;
+}
+
+// Each sender resolves on success and THROWS on any failure, so handleSubmit can fall through to the
+// next backend. FormSubmit returns HTTP 200 even on failure, so its JSON success flag is also checked.
+async function sendViaFormSubmit(player, preds) {
+  const res = await fetch(SUBMIT_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify(buildEmailPayload(player, preds)),
+  });
+  if (!res.ok) throw new Error('FormSubmit HTTP ' + res.status);
+  const result = await res.json().catch(() => ({}));
+  if (String(result.success) !== 'true') throw new Error(result.message || 'FormSubmit not accepted');
+}
+async function sendViaWeb3Forms(player, preds) {
+  if (!WEB3FORMS_ACCESS_KEY) throw new Error('Web3Forms not configured (no access key)');
+  const res = await fetch(WEB3FORMS_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify(buildWeb3Payload(player, preds)),
+  });
+  const result = await res.json().catch(() => ({}));
+  if (!res.ok || result.success !== true) throw new Error(result.message || 'Web3Forms HTTP ' + res.status);
+}
+
 async function handleSubmit() {
   if (isLocked()) { applyLockState(); validate(); return; }  // guard: never submit before OPEN
   const player = document.getElementById('player-select').value;
@@ -666,17 +717,15 @@ async function handleSubmit() {
   document.getElementById('submit-error').classList.remove('visible');
 
   try {
-    const res = await fetch(SUBMIT_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify(buildEmailPayload(player, preds)),
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    // FormSubmit returns HTTP 200 even on failure (e.g. "form needs activation"), so also
-    // check its JSON success flag — otherwise a failed send would look like success and
-    // wipe the saved draft.
-    const result = await res.json().catch(() => ({}));
-    if (String(result.success) !== 'true') throw new Error(result.message || 'Submission not accepted');
+    // Primary: FormSubmit. If it fails (e.g. the provider outage seen 2026-07-12), silently try the
+    // Web3Forms backup before giving up. Only if BOTH backends fail does the player see the mailto
+    // fallback — so a single provider being down no longer blocks a submission.
+    try {
+      await sendViaFormSubmit(player, preds);
+    } catch (primaryErr) {
+      console.warn('FormSubmit failed, trying Web3Forms backup', primaryErr);
+      await sendViaWeb3Forms(player, preds);
+    }
     console.log('Submitted answers for', player, preds);
     document.getElementById('form-container').style.display = 'none';
     document.querySelector('.submit-bar').style.display = 'none';
@@ -685,7 +734,7 @@ async function handleSubmit() {
     submitted = true;
     clearDraft();
   } catch (err) {
-    console.error('Auto-submit failed, falling back to mailto', err);
+    console.error('All auto-submit backends failed, falling back to mailto', err);
     const subject = `${EMAIL_SUBJECT_PREFIX} — ${player}`;
     const body = `Answers from ${player}:\n\n${predsToText(preds)}`;
     document.getElementById('mailto-fallback').href =

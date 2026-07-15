@@ -3491,6 +3491,30 @@ function buildMwWrapInner(mi) {
   const nFix = DATA.matchweeks[mi].fixtures.filter(f => !f.resultsOnly).length;
   const nm = p => `<b>${p}</b>`;
 
+  // Semi-final "questions" rounds score differently (+5/-5 per answer -- no scoreline "correct result"
+  // or "exact score"), so the scoreline stats below (maxCorrect/maxExact) are always 0 here and must NOT
+  // be shown. Instead the accuracy stat is how many of the +5 answers each player nailed this round.
+  // Also, being the FINAL scored round, a questions wrap ranks by the TRUE leaderboard total (bracket
+  // bonuses/deductions included) rather than the match-points-only snapshot the group-stage wraps use.
+  const isQuestions = DATA.matchweeks[mi].fixtures.some(f => f.mode === "questions" && !f.resultsOnly);
+  let qHitLeaders = [], qMaxHits = 0, qTotalAnswers = 0;
+  if (isQuestions) {
+    const answersPerFix = SF_QUESTION_KEYS.length + 1; // 4 numeric answers + the qualify pick
+    qTotalAnswers = DATA.matchweeks[mi].fixtures.filter(f => !f.resultsOnly).length * answersPerFix;
+    const hitsBy = {};
+    DATA.players.forEach(p => {
+      let h = 0;
+      DATA.matchweeks[mi].fixtures.forEach((f, fi) => {
+        if (f.resultsOnly) return;
+        const g = gradeQuestions(f.predictions[p], getActual(mi, fi, f), f.actualStats, f);
+        if (g) h += g.hits;
+      });
+      hitsBy[p] = h;
+    });
+    qMaxHits = Math.max(...DATA.players.map(p => hitsBy[p]));
+    qHitLeaders = DATA.players.filter(p => hitsBy[p] === qMaxHits);
+  }
+
   // Winner = the matchweek-bonus recipient (top scorer that week); show co-winners if tied.
   const winners = DATA.players.filter(p => (totals[p].bonusMw[mi] || 0) > 0)
     .sort((a, b) => totals[b].byMw[mi] - totals[a].byMw[mi]);
@@ -3526,10 +3550,15 @@ function buildMwWrapInner(mi) {
   const rankOf = arr => { const m = {}; arr.forEach((x, k) => m[x.p] = k + 1); return m; };
   const scoredIdxs = []; DATA.matchweeks.forEach((mw, i) => { if (!mw.resultsOnly) scoredIdxs.push(i); });
   const prevIdx = scoredIdxs.indexOf(mi) > 0 ? scoredIdxs[scoredIdxs.indexOf(mi) - 1] : null;
-  const thisSnap = snapAt(mi), thisRank = rankOf(thisSnap);
+  // Questions (final) wrap: rank by the REAL leaderboard total (incl. bracket points) so top/bottom/gap
+  // match the live table; "before" = the same full totals minus THIS round's fixtures. Group-stage wraps
+  // keep the match-points-only snapshot (bracket excluded, since it hadn't resolved yet at that point).
+  const fullSnap = excl => { const t = computeTotals(undefined, undefined, excl); return DATA.players.map(p => ({ p, v: t[p].total })).sort((a, b) => b.v - a.v || a.p.localeCompare(b.p)); };
+  const sfKeys = isQuestions ? new Set(DATA.matchweeks[mi].fixtures.map((f, fi) => fixtureKey(mi, fi))) : null;
+  const thisSnap = isQuestions ? fullSnap(undefined) : snapAt(mi), thisRank = rankOf(thisSnap);
   let moverUp = null, moverDown = null;
   if (prevIdx !== null) {
-    const before = rankOf(snapAt(prevIdx));
+    const before = rankOf(isQuestions ? fullSnap(sfKeys) : snapAt(prevIdx));
     let bestUp = 0, bestDown = 0;
     DATA.players.forEach(p => { const d = before[p] - thisRank[p]; if (d > bestUp) { bestUp = d; moverUp = { p, d }; } if (d < bestDown) { bestDown = d; moverDown = { p, d }; } });
   }
@@ -3546,8 +3575,16 @@ function buildMwWrapInner(mi) {
 
   const rows = [];
   rows.push(`🏆 <b>Winner:</b> ${nm(winner)}${winnerExtra} — <b>${totals[winner].byMw[mi]} pts</b> <span class="mw-wrap-pos">+${MATCHWEEK_WINNER_BONUS}</span>`);
-  const sharp = maxExact > 0 ? `🎯 <b>Sharpest:</b> ${nm(exactLeaders[0])}${exactLeaders.length > 1 ? ` +${exactLeaders.length - 1}` : ""} — ${maxExact} exact &nbsp;·&nbsp; ` : "";
-  rows.push(`${sharp}✅ <b>Most right:</b> ${correctLeaders.length > 1 ? `${maxCorrect}/${nFix} (${correctLeaders.length} players)` : `${nm(correctLeaders[0])} (${maxCorrect}/${nFix})`}`);
+  if (isQuestions) {
+    // Questions round: no scoreline "correct result" -- accuracy is exact answers (+5 each), out of
+    // qTotalAnswers (5 per semi: qualify + corners/cards/shots/added).
+    rows.push(`🎯 <b>Sharpest:</b> ${qHitLeaders.length > 1
+      ? `${qMaxHits}/${qTotalAnswers} answers right (${qHitLeaders.length} players)`
+      : `${nm(qHitLeaders[0])} — ${qMaxHits}/${qTotalAnswers} answers right`}`);
+  } else {
+    const sharp = maxExact > 0 ? `🎯 <b>Sharpest:</b> ${nm(exactLeaders[0])}${exactLeaders.length > 1 ? ` +${exactLeaders.length - 1}` : ""} — ${maxExact} exact &nbsp;·&nbsp; ` : "";
+    rows.push(`${sharp}✅ <b>Most right:</b> ${correctLeaders.length > 1 ? `${maxCorrect}/${nFix} (${correctLeaders.length} players)` : `${nm(correctLeaders[0])} (${maxCorrect}/${nFix})`}`);
+  }
   if (pick) rows.push(`💰 <b>Pick of the week:</b> ${nm(pick.p)} called ${pick.fix} <span class="mw-wrap-pos">+${pick.pts}</span>`);
   if (moverUp || moverDown) rows.push(`${moverUp ? `📈 ${nm(moverUp.p)} <span class="mw-wrap-pos">↑${moverUp.d}</span>` : ""}${moverUp && moverDown ? " &nbsp;·&nbsp; " : ""}${moverDown ? `📉 ${nm(moverDown.p)} <span class="mw-wrap-neg">↓${-moverDown.d}</span>` : ""}`);
   const gwilMid = gIdx === 0

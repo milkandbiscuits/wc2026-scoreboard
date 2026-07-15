@@ -1181,8 +1181,8 @@ DATA.matchweeks.push({
   name: "Final",
   resultsOnly: true,
   fixtures: [
-    { home: "France", away: "England", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-18T19:00:00Z" }, // 3rd-place play-off: France v England (SF losers), Sat 18 Jul 8pm BST
-    { home: "Spain", away: "Argentina", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-19T19:00:00Z" }, // Final: Spain v Argentina (SF winners), Sun 19 Jul 8pm BST
+    { home: "France", away: "England", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-18T19:00:00Z", label: "3rd-place play-off" }, // France v England (SF losers), Sat 18 Jul 8pm BST
+    { home: "Spain", away: "Argentina", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-19T19:00:00Z", label: "Final" }, // Spain v Argentina (SF winners), Sun 19 Jul 8pm BST
   ],
 });
 
@@ -3059,7 +3059,9 @@ function renderNextFixtureCard() {
   // Computed once and shared with the compact banner so both views always show identical wording.
   const guidance = fixtureGuidanceHtml(targets);
   const rows = targets.map(t => renderFixtureRow(t.mwIndex, t.fixIndex, t.fixture)).join("");
-  const mwName = DATA.matchweeks[targets[0].mwIndex].name;
+  // Prefer a per-fixture label (e.g. the "Final" matchweek holds BOTH the 3rd-place play-off and the
+  // Final -- each fixture carries its own `label` so the 3rd-place game isn't mislabelled "Final").
+  const mwName = targets[0].fixture.label || DATA.matchweeks[targets[0].mwIndex].name;
   card.innerHTML = `
     <div class="card-title">${fixtureTitleLabel(targets)}<span class="meta">${mwName}</span></div>
     <div class="table-scroll">
@@ -3112,7 +3114,7 @@ function renderCompactFixtureBanner(targets, guidance) {
     el.innerHTML = "";
     return;
   }
-  const mwName = DATA.matchweeks[targets[0].mwIndex].name;
+  const mwName = targets[0].fixture.label || DATA.matchweeks[targets[0].mwIndex].name; // per-fixture label (3rd-place vs Final)
   const fixtureRows = targets.map(({ mwIndex, fixIndex, fixture }) => {
     const ov = overrides[fixtureKey(mwIndex, fixIndex)] || {};
     const hVal = ov.h !== undefined ? ov.h : (fixture.actual ? fixture.actual.h : "");

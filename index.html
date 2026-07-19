@@ -662,6 +662,22 @@
   .mw-wraps .mw-wrap-pos { color: #22a855; font-weight: 700; }
   .mw-wraps .mw-wrap-neg { color: #e05555; font-weight: 700; }
   .mw-wraps .mw-wrap-quip { margin: 3px 0 0; font-size: 12.5px; font-style: italic; color: #777; }
+  /* 🏆 Tournament Wrap — the end-of-tournament finale card (renderTournamentWrap). Sits at the very top
+     once every fixture is resolved; gold-trimmed, celebratory. */
+  #tournament-wrap-card { padding: 0; overflow: hidden; border: 2px solid #e0b64a; }
+  .tw-head { background: linear-gradient(135deg, #1a2b49, #274a80); color: #fff; padding: 15px 20px; }
+  .tw-head h2 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: .2px; }
+  .tw-head .tw-sub { margin: 3px 0 0; font-size: 12.5px; color: #cdd8ec; font-style: italic; }
+  .tw-body { padding: 6px 20px 16px; }
+  .tw-sec { padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .tw-sec:last-child { border-bottom: none; padding-bottom: 2px; }
+  .tw-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #a07a1e; margin: 0 0 5px; }
+  .tw-sec p { margin: 0; font-size: 14px; color: #333; line-height: 1.45; }
+  .tw-sec p b { color: var(--header-bg); font-weight: 700; }
+  .tw-win { font-size: 17px; font-weight: 800; color: var(--header-bg); }
+  .tw-gold { color: #b8860b; font-weight: 700; }
+  .tw-list { margin: 4px 0 0; font-size: 13.5px; color: #444; line-height: 1.55; }
+  .tw-quip { margin: 10px 0 0; font-size: 13px; font-style: italic; color: #777; }
   /* Desktop: ONLY the top wraps slot becomes a grid of expanded tiles. The bottom archive (shown once
      a round is live) stays a collapsible stack on every viewport. */
   @media (min-width: 900px) and (pointer: fine) {
@@ -972,6 +988,7 @@ window.isEnglandSplashDay = function () {
 
 <div class="container">
 
+  <div class="card" id="tournament-wrap-card" style="display:none;"></div>
   <div id="mw-summary-card" class="mw-wraps" style="display:none;"></div>
   <div class="card" id="shaker-card" style="display:none;"></div>
   <div class="card next-fixture-card" id="next-fixture-card"></div>
@@ -4976,6 +4993,76 @@ function renderPredictions() {
   });
 }
 
+// 🏆 End-of-tournament finale card. Shows only once EVERY fixture is resolved (totalTournamentGoalsFact
+// is non-null exactly then). Recaps the pool winner + top 3, the world champions, both mini-league
+// winners, who called each award, and the 🤖 sweep. Sits at the very top (above the leaderboard).
+function renderTournamentWrap() {
+  const card = document.getElementById("tournament-wrap-card");
+  if (!card) return;
+  const goalsA = totalTournamentGoalsFact();
+  if (goalsA == null) { card.style.display = "none"; card.innerHTML = ""; return; }
+  const cardsA = totalTournamentCardsFact();
+
+  const totals = computeTotals();
+  const ranked = rankPlayers(totals);
+  const w = ranked[0], r2 = ranked[1], r3 = ranked[2];
+  const gap = w.total - r2.total;
+  const F = finalStandingsFacts();
+
+  // Mini-league winner(s): closest guess to the final total (co-winners if tied).
+  const miniWin = (cat, actual) => {
+    const picks = DATA.bracketPicks.picks[cat] || {};
+    const rows = DATA.players.map(p => ({ p, g: Number(picks[p]) })).filter(x => !isNaN(x.g));
+    if (!rows.length || actual == null) return "—";
+    const min = Math.min(...rows.map(x => Math.abs(x.g - actual)));
+    const win = rows.filter(x => Math.abs(x.g - actual) === min);
+    const d = win[0].g - actual;
+    return `${win.map(x => `<b>${x.p}</b>`).join(" &amp; ")} — ${win.length > 1 ? "both on " : ""}${win[0].g} (${d >= 0 ? "+" : ""}${d})`;
+  };
+  // Most-picked name in a category (for the "everyone backed X" colour on a missed award).
+  const popularPick = cat => {
+    const picks = DATA.bracketPicks.picks[cat] || {}; const c = {};
+    DATA.players.forEach(p => { const v = picks[p]; if (v) c[v] = (c[v] || 0) + 1; });
+    return Object.entries(c).sort((a, b) => b[1] - a[1])[0] || null;
+  };
+
+  const hits = id => DATA.players.filter(p => totals[p].bonusDeductionItems.some(it => it.id === id && it.status === "hit"));
+  const boot = hits("goldenBoot"), glove = hits("goldenGlove"), ball = hits("goldenBall"), young = hits("youngPlayer");
+  const bootName = (CONFIRMED_AWARDS.topScorer || {}).name || "—";
+  const called = arr => arr.length === 1 ? `only <b>${arr[0]}</b> saw it coming` : arr.length ? `<b>${arr.length}</b> called it` : "nobody called it";
+  const youngPop = popularPick("Best Young Player");
+  const youngLine = young.length ? `<b>${young.length}</b> called it`
+    : `nobody${youngPop ? ` — the field backed <b>${youngPop[0]}</b> (${youngPop[1]})` : ""}`;
+
+  card.innerHTML = `
+    <div class="tw-head">
+      <h2>🏆 Gwil's WC26 — Full Time</h2>
+      <p class="tw-sub">World Cup 2026 is done and dusted. Here's the final word.</p>
+    </div>
+    <div class="tw-body">
+      <div class="tw-sec"><div class="tw-label">🥇 The Pool Winner</div>
+        <p><span class="tw-win">${w.player} — ${w.total} pts</span>${gap > 0 ? `, <b>${gap}</b> clear of ${r2.player}` : `, tied with ${r2.player}`}. Gwil's WC26 champion.</p>
+        <p class="tw-list">🥇 ${w.player} ${w.total} &nbsp;·&nbsp; 🥈 ${r2.player} ${r2.total} &nbsp;·&nbsp; 🥉 ${r3.player} ${r3.total}</p>
+      </div>
+      <div class="tw-sec"><div class="tw-label">🌍 World Champions</div>
+        <p><b>${F.champion}</b> lift the trophy. <b>${F.runnerUp}</b> runners-up · ${F.third} 3rd · ${F.fourth} 4th.</p>
+      </div>
+      <div class="tw-sec"><div class="tw-label">📊 Mini-Leagues</div>
+        <p class="tw-list">⚽ <b>Total Goals</b> finished on <span class="tw-gold">${goalsA}</span> — closest: ${miniWin("Total Tournament Goals", goalsA)}.<br>
+        🟨 <b>Total Cards</b> finished on <span class="tw-gold">${cardsA}</span> — closest: ${miniWin("Total Tournament Cards", cardsA)}.</p>
+      </div>
+      <div class="tw-sec"><div class="tw-label">🏅 Who Called the Awards</div>
+        <p class="tw-list">🥇 <b>Golden Boot</b> (${bootName}): ${called(boot)}.<br>
+        🧤 <b>Golden Glove</b> (${CONFIRMED_AWARDS.glove}): ${called(glove)}.<br>
+        ⚽ <b>Golden Ball</b> (${CONFIRMED_AWARDS.ball}): ${called(ball)}.<br>
+        🌟 <b>Best Young Player</b> (${CONFIRMED_AWARDS.youngPlayer}): ${youngLine}.</p>
+      </div>
+      ${ball.length === 1 && ball[0] === "🤖" ? `<div class="tw-sec"><div class="tw-label">🤖 Robot of the Tournament</div>
+        <p>The joke entrant <b>🤖</b> finished ${ranked.findIndex(x => x.player === "🤖") + 1}${["st","nd","rd"][ranked.findIndex(x => x.player === "🤖")] || "th"} overall and was the <b>only</b> one to nail the Golden Ball — sweeping Boot, Ball &amp; Glove. Beep boop. 🏅</p></div>` : ""}
+    </div>`;
+  card.style.display = "";
+}
+
 function renderAll() {
   _ctCache = new Map();               // share computeTotals results across this render pass
   _bdCache = new Map();               // and the player-keyed bonus/deduction facts within it
@@ -4983,6 +5070,7 @@ function renderAll() {
     const anchor = document.getElementById('panels');
     const anchorBefore = anchor ? anchor.getBoundingClientRect().top : 0;
     const s = captureScrollState();
+    renderTournamentWrap();
     renderLeaderboard();
     renderPredictions();
     renderNextFixtureCard();

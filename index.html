@@ -339,6 +339,9 @@
   table.pred-table td.pred-rank { color: #bbb; width: 1%; white-space: nowrap; }
   table.pred-table tr.pred-pending-row td { background: #fff6e0; }            /* pale amber: on track for points */
   table.pred-table tr.pred-closest td { background: #ffe3a8; font-weight: 700; } /* darker amber: current leader */
+  table.pred-table tr.pred-confirmed-row td { background: var(--green-bg); }   /* green: points CONFIRMED (tournament over) */
+  table.pred-table tr.pred-won td { background: #bfe8c9; font-weight: 700; }    /* darker green: winner, points confirmed */
+  .pred-confirmed { color: var(--green) !important; }                          /* confirmed bonus (no longer 'pending') */
   .pred-over  { color: #e05555; }
   .pred-under { color: #3a82d6; }
   .pred-zero  { color: #22a855; font-weight: 700; }
@@ -1181,8 +1184,8 @@ DATA.matchweeks.push({
   name: "Final",
   resultsOnly: true,
   fixtures: [
-    { home: "France", away: "England", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-18T21:00:00Z", label: "3rd-place play-off" }, // France v England (SF losers), Sat 18 Jul 10pm BST (22:00)
-    { home: "Spain", away: "Argentina", resultsOnly: true, actual: null, predictions: {}, kickoff: "2026-07-19T19:00:00Z", label: "Final" }, // Spain v Argentina (SF winners), Sun 19 Jul 8pm BST
+    { home: "France", away: "England", resultsOnly: true, actual: {h:4,a:6}, predictions: {}, kickoff: "2026-07-18T21:00:00Z", label: "3rd-place play-off" }, // France 4-6 England (FT, user-confirmed 2026-07-19), Sat 18 Jul 10pm BST
+    { home: "Spain", away: "Argentina", resultsOnly: true, actual: {h:1,a:0}, predictions: {}, kickoff: "2026-07-19T19:00:00Z", label: "Final" }, // FINAL: Spain 1-0 Argentina (AET) -> Spain CHAMPIONS, Sun 19 Jul
   ],
 });
 
@@ -1577,7 +1580,19 @@ function totalTournamentGoalsFact() {
 //   Format when active: { yellow: 205, red: 10, total: 215, games: 66, asOf: "27 Jun" }
 //   Currently null -- using the automatic ESPN feed (it caught up to 66 games on 27 Jun). Flip to a
 //   figure if a more trusted source disagrees (e.g. ESPN was found to undercount yellows vs others).
-const MANUAL_CARDS_OVERRIDE = null;
+const MANUAL_CARDS_OVERRIDE = { yellow: 269, red: 14, total: 283, games: 104, asOf: "19 Jul (final)" }; // FINAL total (tournament over): ESPN had 276 over 103 games, missing 1 game; +7 cards from it = 283 (user-confirmed 2026-07-19). The 7 assumed yellow for the split; the mini-league only uses `total`.
+
+// Manually-confirmed end-of-tournament AWARDS (Gwil announces these as they're revealed; Wikipedia's
+// awards section lags). Merged OVER the auto-parsed tournamentFacts.awards, so any field set here wins.
+// Leave a field null/absent to keep waiting on the announcement (stays "pending", no points). `goals`
+// on topScorer is only used for the "boot pick scored 0/1 goals" deduction (N/A for a real Golden Boot
+// winner); null just leaves that one sub-line pending, no scoring effect.
+const CONFIRMED_AWARDS = {
+  topScorer: { name: "Kylian Mbappé", goals: null }, // Golden Boot — Mbappé (announced 2026-07-19)
+  ball: "Rodri",              // Golden Ball — Rodri (Spain)
+  glove: "Unai Simón",        // Golden Glove — Unai Simón (Spain)
+  youngPlayer: "Pau Cubarsí", // Best Young Player — Cubarsí (Spain)
+};
 
 // The card total the app should use: the manual override when set, otherwise the live ESPN feed.
 function getCardsTotal() {
@@ -1762,7 +1777,7 @@ function computeBonusDeductionPoints(player) {
   const semis = semifinalistTeams();
   const totalGoalsActual = totalTournamentGoalsFact();
   const groupStandings = computeGroupStandings(tournamentFacts.resultsByGroup);
-  const awards = tournamentFacts.awards || {};
+  const awards = { ...(tournamentFacts.awards || {}), ...CONFIRMED_AWARDS }; // manual confirmations win
   const redCardEvents = tournamentFacts.redCards || [];
 
   // Append the player's actual pick to the label so the breakdown is transparent about which
@@ -3603,9 +3618,14 @@ function buildMwWrapInner(mi) {
 // Tracks which wraps the user has toggled open/closed (by MW index); the newest closed MW defaults
 // open, earlier ones collapsed. On desktop CSS forces them all open as a grid of tiles instead.
 const mwWrapOpen = {};
+// Wraps are HIDDEN for the end-of-tournament wind-down (user, 2026-07-19): Gwil announces the overall
+// winner once the remaining awards are revealed, so no wrap should pre-empt that. Flip back to `true` to
+// restore the full wrap machinery (featured newest wrap + bottom archive) unchanged.
+const SHOW_WRAPS = false;
 function renderMwWraps() {
   const top = document.getElementById("mw-summary-card");
   const bottom = document.getElementById("mw-wraps-bottom");
+  if (!SHOW_WRAPS) { top.style.display = "none"; bottom.style.display = "none"; top.innerHTML = bottom.innerHTML = ""; return; }
   const closed = [];
   DATA.matchweeks.forEach((mw, i) => {
     if (mw.resultsOnly) return;
@@ -4835,7 +4855,7 @@ function togglePred(key) {
 
 // One prediction section: sorts players by closeness to the projection, highlights the leader.
 function predSectionHTML(opts) {
-  const { key, title, sub, picks, proj, open, calc } = opts;
+  const { key, title, sub, picks, proj, open, calc, resolved } = opts;
   const rows = DATA.players
     .map(p => ({ player: p, guess: Number(picks[p]) }))
     .filter(r => !isNaN(r.guess));
@@ -4855,13 +4875,18 @@ function predSectionHTML(opts) {
       const cls = d > 0 ? "pred-over" : d < 0 ? "pred-under" : "pred-zero";
       const txt = d > 0 ? `+${d}` : d < 0 ? `${d}` : "spot on";
       diffCell = `<span class="${cls}">${txt}</span>`;
-      // Provisional bonus: +20 exact, +5 within 10% of the projection. Pending until the end.
+      // Bonus: +20 exact, +5 within 10%. Once the tournament's over (resolved) the projection IS the
+      // final total, so the points are CONFIRMED (green, no "pending"); before then they're provisional.
       pts = r.guess === proj ? 20 : (Math.abs(d) / proj <= 0.10 ? 5 : 0);
-      if (pts > 0) bonusCell = `<span class="pred-bonus">+${pts}</span><span class="pred-pending">pending</span>`;
+      if (pts > 0) bonusCell = resolved
+        ? `<span class="pred-bonus pred-confirmed">+${pts}</span>`
+        : `<span class="pred-bonus">+${pts}</span><span class="pred-pending">pending</span>`;
     }
     const tag = closest ? ` <span class="pred-tag">🎯</span>` : "";
-    // Whole-row amber for anyone on track for pending points; a darker amber for the leader.
-    const rowClass = closest ? "pred-closest" : (pts > 0 ? "pred-pending-row" : "");
+    // Resolved: green (confirmed winners); still provisional: amber (on track). Leader a shade darker.
+    const rowClass = closest
+      ? (resolved ? "pred-won" : "pred-closest")
+      : (pts > 0 ? (resolved ? "pred-confirmed-row" : "pred-pending-row") : "");
     return `<tr class="${rowClass}">`
       + `<td class="pred-rank">${i + 1}</td>`
       + `<td>${playerLabel(r.player, "header-mug")}${tag}</td>`
@@ -4877,7 +4902,7 @@ function predSectionHTML(opts) {
     + `<div class="pred-body"><table class="pred-table"><thead><tr>`
     + `<th class="pred-rank"></th><th>Player</th><th class="num">Guess</th><th class="num">vs proj.</th><th class="num">Bonus</th>`
     + `</tr></thead><tbody>${body}</tbody></table>`
-    + `<div class="pred-foot">Provisional (TBC) — the <b>+20</b> / <b>+5</b> confirms once every fixture is resolved</div>`
+    + `<div class="pred-foot">${resolved ? "<b>Final</b> — points confirmed and added to the leaderboard." : "Provisional (TBC) — the <b>+20</b> / <b>+5</b> confirms once every fixture is resolved"}</div>`
     + (calc ? `<div class="pred-calc">${calc}</div>` : "")
     + `</div></div>`;
 }
@@ -4886,6 +4911,11 @@ function renderPredictions() {
   const goalsCard = document.getElementById("goals-pred-card");
   const cardsCard = document.getElementById("cards-pred-card");
   if (!goalsCard || !cardsCard) return;
+
+  // Once every fixture is resolved these facts return the FINAL total (not null) -> the mini-league
+  // points are confirmed, so the tables drop the "projected / pending / moves as results come in" framing.
+  const goalsResolved = totalTournamentGoalsFact() != null;
+  const cardsResolved = totalTournamentCardsFact() != null;
 
   const { goals, games } = computeGoalTally();
   const goalsProj = games ? Math.round((goals / games) * TOTAL_TOURNAMENT_GAMES) : null;
@@ -4901,21 +4931,26 @@ function renderPredictions() {
 
   const ruleNote = `<span class="pred-rule">+20 exact · +5 within 10%</span>`;
   const goalsSub = games
-    ? `<b>${goals}</b> goals in <b>${games}</b> games · projected <b class="pred-proj">~${goalsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games · ${ruleNote}`
+    ? (goalsResolved
+        ? `<b>${goals}</b> goals in <b>${games}</b> games · <b class="pred-proj">FINAL</b> · ${ruleNote}`
+        : `<b>${goals}</b> goals in <b>${games}</b> games · projected <b class="pred-proj">~${goalsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games · ${ruleNote}`)
     : "no games played yet";
 
   const cardsManualNote = (ct && ct.manual)
     ? ` · <span class="pred-manual">manual · as of ${ct.asOf}</span>`
     : "";
   const cardsSub = ct
-    ? `<b>${ct.total}</b> cards (${ct.yellow}🟨 ${ct.red}🟥) in <b>${cardGames}</b> games · projected <b class="pred-proj">~${cardsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games · ${ruleNote}${cardsManualNote}`
+    ? (cardsResolved
+        ? `<b>${ct.total}</b> cards (${ct.yellow}🟨 ${ct.red}🟥) in <b>${cardGames}</b> games · <b class="pred-proj">FINAL</b> · ${ruleNote}${cardsManualNote}`
+        : `<b>${ct.total}</b> cards (${ct.yellow}🟨 ${ct.red}🟥) in <b>${cardGames}</b> games · projected <b class="pred-proj">~${cardsProj}</b> over ${TOTAL_TOURNAMENT_GAMES} games · ${ruleNote}${cardsManualNote}`)
     : "waiting for live card data…";
 
-  // Brief "how the projection works" note shown at the bottom of each league.
-  const goalsCalc = games
+  // Brief "how the projection works" note shown at the bottom of each league (only while provisional --
+  // once resolved the total is final, not a projection, so the note is dropped).
+  const goalsCalc = (games && !goalsResolved)
     ? `How it's projected: ${goals} ÷ ${games} = ${(goals / games).toFixed(2)} goals/game × ${TOTAL_TOURNAMENT_GAMES} games ≈ ${goalsProj}. Moves as results come in.`
     : null;
-  const cardsCalc = (cardsTotal != null && cardGames)
+  const cardsCalc = (cardsTotal != null && cardGames && !cardsResolved)
     ? `How it's projected: ${cardsTotal} ÷ ${cardGames} = ${(cardsTotal / cardGames).toFixed(2)} cards/game × ${TOTAL_TOURNAMENT_GAMES} games ≈ ${cardsProj}. Moves as results come in.`
     : null;
 
@@ -4927,6 +4962,7 @@ function renderPredictions() {
     picks: DATA.bracketPicks.picks["Total Tournament Goals"],
     proj: goalsProj,
     calc: goalsCalc,
+    resolved: goalsResolved,
   });
   cardsCard.innerHTML = predSectionHTML({
     key: "cards",
@@ -4936,6 +4972,7 @@ function renderPredictions() {
     picks: DATA.bracketPicks.picks["Total Tournament Cards"],
     proj: cardsProj,
     calc: cardsCalc,
+    resolved: cardsResolved,
   });
 }
 

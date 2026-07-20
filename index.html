@@ -5003,7 +5003,7 @@ function renderPredictions() {
 // is non-null exactly then) AND the flag below is on. Recaps the pool winner + top 3, the world champions,
 // both mini-league winners, who called each award, and the 🤖 sweep. Sits at the very top.
 // HELD OFF until the user gives the say-so (2026-07-20) — flip to `true` to reveal it.
-const SHOW_TOURNAMENT_WRAP = false;
+const SHOW_TOURNAMENT_WRAP = true;
 function renderTournamentWrap() {
   const card = document.getElementById("tournament-wrap-card");
   if (!card) return;

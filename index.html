@@ -5074,6 +5074,23 @@ function renderTournamentWrap() {
     return wns.length ? `<b>${matchweekShortLabel(mw.name)}</b> ${wns.join(" &amp; ")}` : null;
   }).filter(Boolean);
 
+  // Biggest climber / faller across the whole tournament: rank after the FIRST matchweek (match-points
+  // basis, like the per-MW wraps) vs the final leaderboard rank (full total).
+  const ord = n => n + (n >= 11 && n <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] || "th"));
+  const sumV = o => Object.values(o).reduce((a, b) => a + (b || 0), 0);
+  const firstScored = DATA.matchweeks.findIndex(mw => !mw.resultsOnly);
+  const startKeys = new Set();
+  DATA.matchweeks.forEach((mw, i) => { if (i <= firstScored && !mw.resultsOnly) mw.fixtures.forEach((f, fi) => { if (!f.resultsOnly) startKeys.add(fixtureKey(i, fi)); }); });
+  const startTot = computeTotals(undefined, startKeys);
+  const startRank = {};
+  DATA.players.map(p => ({ p, v: sumV(startTot[p].byMw) + sumV(startTot[p].bonusMw) }))
+    .sort((a, b) => b.v - a.v || a.p.localeCompare(b.p)).forEach((x, i) => startRank[x.p] = i + 1);
+  const finalRank = {}; ranked.forEach((r, i) => finalRank[r.player] = i + 1);
+  const moves = DATA.players.map(p => ({ p, start: startRank[p], end: finalRank[p], d: startRank[p] - finalRank[p] }));
+  const climber = moves.slice().sort((a, b) => b.d - a.d)[0];
+  const climberHuman = moves.filter(m => m.p !== "🤖").sort((a, b) => b.d - a.d)[0]; // best non-robot climber
+  const faller = moves.slice().sort((a, b) => a.d - b.d)[0];
+
   card.innerHTML = `
     <div class="tw-head">
       <h2>🏆 Gwil's WC26 — Full Time</h2>
@@ -5081,7 +5098,7 @@ function renderTournamentWrap() {
     </div>
     <div class="tw-body">
       <div class="tw-sec"><div class="tw-label">🥇 The Pool Winner</div>
-        <p><span class="tw-win">${w.player} — ${w.total} pts</span>${gap > 0 ? `, <b>${gap}</b> clear of ${r2.player}` : `, tied with ${r2.player}`}. Gwil's WC26 champion.</p>
+        <p><span class="tw-win tw-gold">${w.player} — ${w.total} pts</span> — Gwil's WC26 champion 🏆.${gap > 0 ? ` Won it by <b>${gap}</b> point${gap === 1 ? "" : "s"}.` : ` (tied with ${r2.player} — settled on the tie-break).`}</p>
         <p class="tw-list">🥇 ${w.player} ${w.total} &nbsp;·&nbsp; 🥈 ${r2.player} ${r2.total} &nbsp;·&nbsp; 🥉 ${r3.player} ${r3.total}</p>
       </div>
       <div class="tw-sec"><div class="tw-label">🌍 World Champions</div>
@@ -5097,6 +5114,10 @@ function renderTournamentWrap() {
       </div>
       <div class="tw-sec"><div class="tw-label">📅 Matchweek Winners</div>
         <p class="tw-list">${mwWins.join(" &nbsp;·&nbsp; ")}</p>
+      </div>
+      <div class="tw-sec"><div class="tw-label">📈 Biggest Movers (MW1 → final)</div>
+        <p class="tw-list">🚀 <b>${climber.p}</b> climbed <span class="tw-gold">${climber.d}</span> place${climber.d === 1 ? "" : "s"} — ${ord(climber.start)} after MW1 to ${ord(climber.end)} overall.${climber.p === "🤖" && climberHuman ? `<br>🧑 Top human climber: <b>${climberHuman.p}</b> — up <span class="tw-gold">${climberHuman.d}</span> (${ord(climberHuman.start)} → ${ord(climberHuman.end)}).` : ""}<br>
+        📉 <b>${faller.p}</b> dropped <span class="tw-gold">${-faller.d}</span> place${-faller.d === 1 ? "" : "s"} — ${ord(faller.start)} after MW1 to ${ord(faller.end)}.</p>
       </div>
       <div class="tw-sec"><div class="tw-label">🏅 Who Called the Awards</div>
         <p class="tw-list">🥇 <b>Golden Boot</b> (${bootName}): ${called(boot)}.<br>

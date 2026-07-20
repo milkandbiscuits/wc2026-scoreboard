@@ -821,8 +821,9 @@
     .next-fixture-card { display: none; }
     .compact-fixture-banner { display: block; }
     .col-mw-past { display: none; }
-    .col-correct { display: none; }
+    .col-mw-sf { display: none; }   /* hide the SF (questions) matchweek column in portrait */
     .mw-stat-badge { display: none; }
+    /* Portrait final-leaderboard columns: #, Player, +/- PTS, Correct, Total (Correct now SHOWS here) */
     .rank-move { font-size: 10px; width: 26px; }
     table.leaderboard th, table.leaderboard td,
     table.pred-table th, table.pred-table td { padding: 6px 8px; }
@@ -2466,7 +2467,7 @@ function renderLeaderboard() {
   // is frozen right (so it sits at the right edge it needs Total to be the last column). See the
   // `.lb-freeze-*` sticky CSS, scoped to the full-column (non-portrait) layout.
   head.innerHTML = `<th class="lb-freeze-rank">#</th><th class="lb-freeze-player">Player</th>` +
-    DATA.matchweeks.map((mw, i) => mw.resultsOnly ? "" : `<th class="num${i < lastScoredMwIndex ? ' col-mw-past' : ''}" title="${mw.name}">${matchweekShortLabel(mw.name)}</th>`).join("") +
+    DATA.matchweeks.map((mw, i) => mw.resultsOnly ? "" : `<th class="num${i < lastScoredMwIndex ? ' col-mw-past' : ''}${mw.fixtures.some(f => f.mode === "questions") ? ' col-mw-sf' : ''}" title="${mw.name}">${matchweekShortLabel(mw.name)}</th>`).join("") +
     `<th class="num" title="Bonus points (net): matchweek wins + bracket bonus &amp; deductions">+/- PTS</th><th class="num col-correct">Correct</th><th class="num col-exact">Exact</th><th class="num lb-freeze-total">Total</th>`;
 
   const maxCorrect = Math.max(...rows.map(r => r.correct));
@@ -2568,7 +2569,7 @@ function renderLeaderboard() {
     const totalClass = r.total > 0 ? "total-pos" : (r.total < 0 ? "total-neg" : "");
     const mwCells = DATA.matchweeks.map((mw, mi) => {
       if (mw.resultsOnly) return ""; // no leaderboard column for results-only matchweeks
-      const past = mwIsPast[mi] ? " mw-past col-mw-past" : "";
+      const past = (mwIsPast[mi] ? " mw-past col-mw-past" : "") + (mw.fixtures.some(f => f.mode === "questions") ? " col-mw-sf" : "");
       const v = r.byMw[mi]; // raw matchweek score -- the MW-win bonus now lives in the +/- PTS column
       const display = `${v > 0 ? "+" : ""}${v}`;
       const cLeadMw = past && maxCorrectByMw[mi] > 0 && r.correctByMw[mi] === maxCorrectByMw[mi];

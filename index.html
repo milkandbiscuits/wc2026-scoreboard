@@ -1605,10 +1605,14 @@ const MANUAL_CARDS_OVERRIDE = { yellow: 269, red: 14, total: 283, games: 104, as
 // on topScorer is only used for the "boot pick scored 0/1 goals" deduction (N/A for a real Golden Boot
 // winner); null just leaves that one sub-line pending, no scoring effect.
 const CONFIRMED_AWARDS = {
-  topScorer: { name: "Kylian Mbappé", goals: null }, // Golden Boot — Mbappé (announced 2026-07-19)
+  topScorer: { name: "Kylian Mbappé", goals: 10 }, // Golden Boot — Mbappé, 10 goals (announced 2026-07-19)
   ball: "Rodri",              // Golden Ball — Rodri (Spain)
   glove: "Unai Simón",        // Golden Glove — Unai Simón (Spain)
   youngPlayer: "Pau Cubarsí", // Best Young Player — Cubarsí (Spain)
+  // Team of the Tournament (DAZN's WC26 XI, 2026-07-20) — feeds the +2 goldenBootDreamTeam /
+  // +2 youngPlayerDreamTeam bonuses (a player's Golden Boot / Young Player pick appearing in this XI).
+  dreamTeam: ["Vozinha", "Pedro Porro", "Pau Cubarsí", "Lisandro Martínez", "Marc Cucurella",
+    "Rodri", "Jude Bellingham", "Michael Olise", "Lionel Messi", "Kylian Mbappé", "Erling Haaland"],
 };
 
 // The card total the app should use: the manual override when set, otherwise the live ESPN feed.
@@ -1716,7 +1720,13 @@ function knockoutEliminationLoss(teamCode) {
 // final), or "pending" (team hasn't had a resolved knockout loss yet -- could still happen later).
 function nonSeededUpsetStatus(teamCode) {
   const loss = knockoutEliminationLoss(teamCode);
-  if (!loss) return { status: "pending" };
+  if (!loss) {
+    // No knockout elimination loss. Once the tournament's over that means this team WON it (the champions
+    // never lose out of the trophy race) -> the "lost to a non-seeded team" deduction is definitively a
+    // miss, not still pending. Otherwise (tournament still running) it genuinely isn't knowable yet.
+    const champ = finalStandingsFacts().champion;
+    return (champ && codeForTeamName(champ) === teamCode) ? { status: "miss" } : { status: "pending" };
+  }
   const { finalFixture } = identifyFinalAndThirdFixtures();
   if (finalFixture === loss.fixture) return { status: "miss" }; // losing the final itself is excepted
   if (isSeededCode(loss.opponentCode)) return { status: "miss" };
@@ -1909,16 +1919,22 @@ function computeBonusDeductionPoints(player) {
       upset.status, BONUS_RULE_POINTS.championsNonSeededLoss);
   }
 
-  if (!awards.topScorer || awards.topScorer.goals === null || awards.topScorer.goals === undefined) {
+  // Stays pending only until the Golden Boot WINNER is announced (name set). Once it is, an unknown exact
+  // tally (goals null) resolves as "not a 0/1-goal flop" — a Golden Boot winner scored the MOST, never 0
+  // or 1 — so it falls through to the final "miss" (no penalty). An explicit 0/1 (Gwil sets it) still fires.
+  if (!awards.topScorer || !awards.topScorer.name) {
     add("goldenBootGoals", "Golden Boot goal tally", "pending", 0);
   } else if (!namesMatch(pickFor("Golden Boot", player), awards.topScorer.name)) {
-    add("goldenBootGoals", "Golden Boot goal tally", "miss", 0);
+    add("goldenBootGoals", "Golden Boot 0/1-goal penalty — n/a", "miss", 0);
   } else if (awards.topScorer.goals === 0) {
     add("goldenBootGoals", "Golden Boot pick scored 0 goals", "hit", BONUS_RULE_POINTS.goldenBootZeroGoals);
   } else if (awards.topScorer.goals === 1) {
     add("goldenBootGoals", "Golden Boot pick scored only 1 goal", "hit", BONUS_RULE_POINTS.goldenBootOneGoal);
   } else {
-    add("goldenBootGoals", "Golden Boot goal tally", "miss", 0);
+    // Winner scored 2+ (the norm) -> the 0/1-goal penalty doesn't apply. Show the actual tally when known
+    // so it never reads like "scored 0/1"; "no" (the miss marker) then means "no penalty".
+    const gt = typeof awards.topScorer.goals === "number" ? `${awards.topScorer.goals} goals` : "2+ goals";
+    add("goldenBootGoals", `Golden Boot pick scored ${gt} — no 0/1 penalty`, "miss", 0);
   }
 
   // Red card deductions for Golden Ball / Young Player picks -- repeatable, one item per event, but
@@ -3753,6 +3769,9 @@ function bracketCellContent(category, player, totals) {
   const allPending = items.every(it => it.status === "pending");
   const sum = items.reduce((s, it) => s + it.pts, 0);
   const title = items.map(it => {
+    // goldenBootGoals carries a self-complete label (e.g. "…scored 10 goals — no 0/1 penalty"), so don't
+    // tack the generic miss marker "no" on the end (that produced a confusing "…penalty  no").
+    if (it.id === "goldenBootGoals" && it.status === "miss") return it.label;
     const v = it.status === "pending" ? "pending" : it.status === "ambiguous" ? "ambiguous, needs manual check" : it.status === "miss" ? "no" : `${it.pts > 0 ? "+" : ""}${it.pts}`;
     return `${it.label}  ${v}`;
   }).join("\n").replace(/"/g, "&quot;");
@@ -3773,7 +3792,16 @@ function bracketCellContent(category, player, totals) {
   const cellClass = sum > 0 ? "cell-bonus-pos" : (sum < 0 ? "cell-bonus-neg" : "cell-bonus-neutral");
   const numClass = sum > 0 ? "total-pos" : (sum < 0 ? "total-neg" : "");
   const display = sum === 0 ? "0" : `${sum > 0 ? "+" : ""}${sum}`;
-  return { html: `${pick}<br><span class="bonus-info-box ${numClass}" title="${title}">${display}</span>`, cellClass };
+  // When a pick nets from BOTH a bonus AND a deduction (e.g. Mbappé Golden Boot: +5 correct, +2 Team of
+  // the Tournament, -5 missed penalty = +2), the bare net hides the -5. Show the same +gross/-gross split
+  // the leaderboard's +/- PTS column uses, stacked to the right of the net (full breakdown still on tap).
+  const grossPos = items.filter(it => it.pts > 0).reduce((s, it) => s + it.pts, 0);
+  const grossNeg = items.filter(it => it.pts < 0).reduce((s, it) => s + it.pts, 0);
+  const splitSpan = (grossPos > 0 && grossNeg < 0)
+    ? `<span class="bonus-split"><span class="bps-pos">+${grossPos}</span><span class="bps-neg">${grossNeg}</span></span>`
+    : "";
+  const netSpan = `<span class="bonus-info-box ${numClass}" title="${title}">${display}</span>`;
+  return { html: `${pick}<br><span class="bonus-cell">${netSpan}${splitSpan}</span>`, cellClass };
 }
 
 // Red card hits don't map to a single category cell (they're tied to whichever Golden Ball/Young
@@ -5036,6 +5064,16 @@ function renderTournamentWrap() {
   const youngLine = young.length ? `<b>${young.length}</b> called it`
     : `nobody${youngPop ? ` — the field backed <b>${youngPop[0]}</b> (${youngPop[1]})` : ""}`;
 
+  // Most correct results / most exact scores across the whole tournament (tie-aware).
+  const bestBy = key => { const m = Math.max(...DATA.players.map(p => totals[p][key] || 0)); return { m, who: DATA.players.filter(p => (totals[p][key] || 0) === m) }; };
+  const bc = bestBy("correct"), be = bestBy("exactCount");
+  // Every scored matchweek's winner(s), in order (the MW-winner bonus recipients).
+  const mwWins = DATA.matchweeks.map((mw, mi) => {
+    if (mw.resultsOnly || !mw.fixtures.some(f => !f.resultsOnly)) return null;
+    const wns = DATA.players.filter(p => (totals[p].bonusMw[mi] || 0) > 0).sort((a, b) => totals[b].byMw[mi] - totals[a].byMw[mi]);
+    return wns.length ? `<b>${matchweekShortLabel(mw.name)}</b> ${wns.join(" &amp; ")}` : null;
+  }).filter(Boolean);
+
   card.innerHTML = `
     <div class="tw-head">
       <h2>🏆 Gwil's WC26 — Full Time</h2>
@@ -5052,6 +5090,13 @@ function renderTournamentWrap() {
       <div class="tw-sec"><div class="tw-label">📊 Mini-Leagues</div>
         <p class="tw-list">⚽ <b>Total Goals</b> finished on <span class="tw-gold">${goalsA}</span> — closest: ${miniWin("Total Tournament Goals", goalsA)}.<br>
         🟨 <b>Total Cards</b> finished on <span class="tw-gold">${cardsA}</span> — closest: ${miniWin("Total Tournament Cards", cardsA)}.</p>
+      </div>
+      <div class="tw-sec"><div class="tw-label">🎯 Sharpest of the Tournament</div>
+        <p class="tw-list">✅ Most correct results: ${bc.who.map(p => `<b>${p}</b>`).join(" &amp; ")} — <span class="tw-gold">${bc.m}</span><br>
+        🎯 Most exact scores: ${be.who.map(p => `<b>${p}</b>`).join(" &amp; ")} — <span class="tw-gold">${be.m}</span></p>
+      </div>
+      <div class="tw-sec"><div class="tw-label">📅 Matchweek Winners</div>
+        <p class="tw-list">${mwWins.join(" &nbsp;·&nbsp; ")}</p>
       </div>
       <div class="tw-sec"><div class="tw-label">🏅 Who Called the Awards</div>
         <p class="tw-list">🥇 <b>Golden Boot</b> (${bootName}): ${called(boot)}.<br>

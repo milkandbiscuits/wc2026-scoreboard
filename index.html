@@ -678,6 +678,7 @@
   .tw-gold { color: #b8860b; font-weight: 700; }
   .tw-list { margin: 4px 0 0; font-size: 13.5px; color: #444; line-height: 1.55; }
   .tw-quip { margin: 10px 0 0; font-size: 13px; font-style: italic; color: #777; }
+  .tw-mug { height: 22px; width: auto; vertical-align: middle; margin: -2px 0; }  /* Gwil's mug inline in the wrap */
   /* Desktop: ONLY the top wraps slot becomes a grid of expanded tiles. The bottom archive (shown once
      a round is live) stays a collapsible stack on every viewport. */
   @media (min-width: 900px) and (pointer: fine) {
@@ -5038,6 +5039,9 @@ function renderTournamentWrap() {
   const w = ranked[0], r2 = ranked[1], r3 = ranked[2];
   const gap = w.total - r2.total;
   const F = finalStandingsFacts();
+  // Render a POOL PLAYER name -- swaps in Gwil's mug for "Gwil" (playerLabel), plain text for everyone
+  // else. Use ONLY for pool participants, never for footballer/team names (award winners, champions).
+  const pl = p => playerLabel(p, "tw-mug");
 
   // Mini-league winner(s): closest guess to the final total (co-winners if tied).
   const miniWin = (cat, actual) => {
@@ -5047,7 +5051,7 @@ function renderTournamentWrap() {
     const min = Math.min(...rows.map(x => Math.abs(x.g - actual)));
     const win = rows.filter(x => Math.abs(x.g - actual) === min);
     const d = win[0].g - actual;
-    return `${win.map(x => `<b>${x.p}</b>`).join(" &amp; ")} — ${win.length > 1 ? "both on " : ""}${win[0].g} (${d >= 0 ? "+" : ""}${d})`;
+    return `${win.map(x => `<b>${pl(x.p)}</b>`).join(" &amp; ")} — ${win.length > 1 ? "both on " : ""}${win[0].g} (${d >= 0 ? "+" : ""}${d})`;
   };
   // Most-picked name in a category (for the "everyone backed X" colour on a missed award).
   const popularPick = cat => {
@@ -5059,7 +5063,7 @@ function renderTournamentWrap() {
   const hits = id => DATA.players.filter(p => totals[p].bonusDeductionItems.some(it => it.id === id && it.status === "hit"));
   const boot = hits("goldenBoot"), glove = hits("goldenGlove"), ball = hits("goldenBall"), young = hits("youngPlayer");
   const bootName = (CONFIRMED_AWARDS.topScorer || {}).name || "—";
-  const called = arr => arr.length === 1 ? `only <b>${arr[0]}</b> saw it coming` : arr.length ? `<b>${arr.length}</b> called it` : "nobody called it";
+  const called = arr => arr.length === 1 ? `only <b>${pl(arr[0])}</b> saw it coming` : arr.length ? `<b>${arr.length}</b> called it` : "nobody called it";
   const youngPop = popularPick("Best Young Player");
   const youngLine = young.length ? `<b>${young.length}</b> called it`
     : `nobody${youngPop ? ` — the field backed <b>${youngPop[0]}</b> (${youngPop[1]})` : ""}`;
@@ -5071,7 +5075,7 @@ function renderTournamentWrap() {
   const mwWins = DATA.matchweeks.map((mw, mi) => {
     if (mw.resultsOnly || !mw.fixtures.some(f => !f.resultsOnly)) return null;
     const wns = DATA.players.filter(p => (totals[p].bonusMw[mi] || 0) > 0).sort((a, b) => totals[b].byMw[mi] - totals[a].byMw[mi]);
-    return wns.length ? `<b>${matchweekShortLabel(mw.name)}</b> ${wns.join(" &amp; ")}` : null;
+    return wns.length ? `<b>${matchweekShortLabel(mw.name)}</b> ${wns.map(pl).join(" &amp; ")}` : null;
   }).filter(Boolean);
 
   // Biggest climber / faller across the whole tournament: rank after the FIRST matchweek (match-points
@@ -5105,8 +5109,8 @@ function renderTournamentWrap() {
     </div>
     <div class="tw-body">
       <div class="tw-sec"><div class="tw-label">🥇 The Pool Winner</div>
-        <p><span class="tw-win tw-gold">${w.player} — ${w.total} pts</span> — Gwil's WC26 champion 🏆.${gap > 0 ? ` Won it by <b>${gap}</b> point${gap === 1 ? "" : "s"}.` : ` (tied with ${r2.player} — settled on the tie-break).`}</p>
-        <p class="tw-list">🥇 ${w.player} ${w.total} &nbsp;·&nbsp; 🥈 ${r2.player} ${r2.total} &nbsp;·&nbsp; 🥉 ${r3.player} ${r3.total}</p>
+        <p><span class="tw-win tw-gold">${pl(w.player)} — ${w.total} pts</span> — Gwil's WC26 champion 🏆.${gap > 0 ? ` Won it by <b>${gap}</b> point${gap === 1 ? "" : "s"}.` : ` (tied with ${pl(r2.player)} — settled on the tie-break).`}</p>
+        <p class="tw-list">🥇 ${pl(w.player)} ${w.total} &nbsp;·&nbsp; 🥈 ${pl(r2.player)} ${r2.total} &nbsp;·&nbsp; 🥉 ${pl(r3.player)} ${r3.total}</p>
       </div>
       <div class="tw-sec"><div class="tw-label">🌍 World Champions</div>
         <p><b>${F.champion}</b> lift the trophy. <b>${F.runnerUp}</b> runners-up · ${F.third} 3rd · ${F.fourth} 4th.</p>
@@ -5116,18 +5120,18 @@ function renderTournamentWrap() {
         🟨 <b>Total Cards</b> finished on <span class="tw-gold">${cardsA}</span> — closest: ${miniWin("Total Tournament Cards", cardsA)}.</p>
       </div>
       <div class="tw-sec"><div class="tw-label">🎯 Sharpest of the Tournament</div>
-        <p class="tw-list">✅ Most correct results: ${bc.who.map(p => `<b>${p}</b>`).join(" &amp; ")} — <span class="tw-gold">${bc.m}</span><br>
-        🎯 Most exact scores: ${be.who.map(p => `<b>${p}</b>`).join(" &amp; ")} — <span class="tw-gold">${be.m}</span></p>
+        <p class="tw-list">✅ Most correct results: ${bc.who.map(p => `<b>${pl(p)}</b>`).join(" &amp; ")} — <span class="tw-gold">${bc.m}</span><br>
+        🎯 Most exact scores: ${be.who.map(p => `<b>${pl(p)}</b>`).join(" &amp; ")} — <span class="tw-gold">${be.m}</span></p>
       </div>
       <div class="tw-sec"><div class="tw-label">💰 Top Bonus Points (+/− PTS)</div>
-        <p class="tw-list">${topBonus.map(x => `${bmedal(x.rank)} <b>${x.p}</b> <span class="tw-gold">${x.b >= 0 ? "+" : ""}${x.b}</span>`).join(" &nbsp;·&nbsp; ")}</p>
+        <p class="tw-list">${topBonus.map(x => `${bmedal(x.rank)} <b>${pl(x.p)}</b> <span class="tw-gold">${x.b >= 0 ? "+" : ""}${x.b}</span>`).join(" &nbsp;·&nbsp; ")}</p>
       </div>
       <div class="tw-sec"><div class="tw-label">📅 Matchweek Winners</div>
         <p class="tw-list">${mwWins.join(" &nbsp;·&nbsp; ")}</p>
       </div>
       <div class="tw-sec"><div class="tw-label">📈 Biggest Movers (MW1 → final)</div>
-        <p class="tw-list">🚀 <b>${climber.p}</b> climbed <span class="tw-gold">${climber.d}</span> place${climber.d === 1 ? "" : "s"} — ${ord(climber.start)} after MW1 to ${ord(climber.end)} overall.${climber.p === "🤖" && climberHuman ? `<br>🧑 Top human climber: <b>${climberHuman.p}</b> — up <span class="tw-gold">${climberHuman.d}</span> (${ord(climberHuman.start)} → ${ord(climberHuman.end)}).` : ""}<br>
-        📉 <b>${faller.p}</b> dropped <span class="tw-gold">${-faller.d}</span> place${-faller.d === 1 ? "" : "s"} — ${ord(faller.start)} after MW1 to ${ord(faller.end)}.</p>
+        <p class="tw-list">🚀 <b>${pl(climber.p)}</b> climbed <span class="tw-gold">${climber.d}</span> place${climber.d === 1 ? "" : "s"} — ${ord(climber.start)} after MW1 to ${ord(climber.end)} overall.${climber.p === "🤖" && climberHuman ? `<br>🧑 Top human climber: <b>${pl(climberHuman.p)}</b> — up <span class="tw-gold">${climberHuman.d}</span> (${ord(climberHuman.start)} → ${ord(climberHuman.end)}).` : ""}<br>
+        📉 <b>${pl(faller.p)}</b> dropped <span class="tw-gold">${-faller.d}</span> place${-faller.d === 1 ? "" : "s"} — ${ord(faller.start)} after MW1 to ${ord(faller.end)}.</p>
       </div>
       <div class="tw-sec"><div class="tw-label">🏅 Who Called the Awards</div>
         <p class="tw-list">🥇 <b>Golden Boot</b> (${bootName}): ${called(boot)}.<br>

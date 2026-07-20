@@ -5091,6 +5091,13 @@ function renderTournamentWrap() {
   const climberHuman = moves.filter(m => m.p !== "🤖").sort((a, b) => b.d - a.d)[0]; // best non-robot climber
   const faller = moves.slice().sort((a, b) => a.d - b.d)[0];
 
+  // Top bonus-points earners = the bracket bonus/deduction total (the leaderboard's +/- PTS column).
+  // Rank 1224-style so ties share a place; keep everyone in the top 3 positions.
+  const bmedal = r => r === 1 ? "🥇" : r === 2 ? "🥈" : "🥉";
+  const bonusArr = DATA.players.map(p => ({ p, b: totals[p].bonusDeductionPts || 0 })).sort((a, b) => b.b - a.b || a.p.localeCompare(b.p));
+  let brk = 0, bprev = null;
+  const topBonus = bonusArr.map((x, i) => { if (x.b !== bprev) { brk = i + 1; bprev = x.b; } return { ...x, rank: brk }; }).filter(x => x.rank <= 3);
+
   card.innerHTML = `
     <div class="tw-head">
       <h2>🏆 Gwil's WC26 — Full Time</h2>
@@ -5111,6 +5118,9 @@ function renderTournamentWrap() {
       <div class="tw-sec"><div class="tw-label">🎯 Sharpest of the Tournament</div>
         <p class="tw-list">✅ Most correct results: ${bc.who.map(p => `<b>${p}</b>`).join(" &amp; ")} — <span class="tw-gold">${bc.m}</span><br>
         🎯 Most exact scores: ${be.who.map(p => `<b>${p}</b>`).join(" &amp; ")} — <span class="tw-gold">${be.m}</span></p>
+      </div>
+      <div class="tw-sec"><div class="tw-label">💰 Top Bonus-Points Earners</div>
+        <p class="tw-list">${topBonus.map(x => `${bmedal(x.rank)} <b>${x.p}</b> <span class="tw-gold">${x.b >= 0 ? "+" : ""}${x.b}</span>`).join(" &nbsp;·&nbsp; ")}</p>
       </div>
       <div class="tw-sec"><div class="tw-label">📅 Matchweek Winners</div>
         <p class="tw-list">${mwWins.join(" &nbsp;·&nbsp; ")}</p>

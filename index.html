@@ -2425,9 +2425,9 @@ function playGwilSplash(caption, celebrate) {
   setTimeout(() => { el.parentNode && el.parentNode.removeChild(el); }, celebrate ? 3600 : 2350);
 }
 
-// Tournament over: tapping Gwil's header mug delivers the sign-off (full-screen Gwil moment). First tap
-// congratulates the pool winner (computed live, so it always names the real champion) + a thank-you;
-// every tap after that is Gwilliano's mic-drop.
+// Tournament over: tapping Gwil's header mug delivers the sign-off (full-screen Gwil moment). Taps CYCLE
+// between two lines — odd taps (1st, 3rd, …) congratulate the pool winner (computed live, always the real
+// champion) + a thank-you; even taps (2nd, 4th, …) are Gwilliano's mic-drop.
 (function mugTap() {
   const mug = document.querySelector(".gwil-mug");
   if (!mug) return;
@@ -2438,7 +2438,7 @@ function playGwilSplash(caption, celebrate) {
     taps++;
     let winner = "Gaz T";
     try { winner = rankPlayers(computeTotals())[0].player; } catch (e) { /* fall back to the known winner */ }
-    const msg = taps === 1
+    const msg = taps % 2 === 1
       ? `Congratulations ${winner} 🏆 — Thanks everyone for playing!`
       : "Gwilliano signing off 🫡 💸";
     playGwilSplash(msg, true);
